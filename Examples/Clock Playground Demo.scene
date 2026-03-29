@@ -3,7 +3,7 @@
   "steps": [
     {
       "type": "runShellCommand",
-      "command": "pkill -x ghostty || true"
+      "command": "pkill -x Terminal || true"
     },
     {
       "type": "delay",
@@ -11,7 +11,7 @@
     },
     {
       "type": "launchApp",
-      "bundleIdentifier": "com.mitchellh.ghostty"
+      "bundleIdentifier": "com.apple.Terminal"
     },
     {
       "type": "delay",
@@ -19,7 +19,7 @@
     },
     {
       "type": "moveWindow",
-      "bundleIdentifier": "com.mitchellh.ghostty",
+      "bundleIdentifier": "com.apple.Terminal",
       "xFraction": 0.0,
       "yFraction": 0.0,
       "widthFraction": 0.5,
@@ -30,14 +30,8 @@
       "seconds": 0.5
     },
     {
-      "type": "typeText",
-      "bundleIdentifier": "com.mitchellh.ghostty",
-      "text": "cd /Users/umeboshi/Git/clock-playground && npm run workstream"
-    },
-    {
-      "type": "pressKey",
-      "bundleIdentifier": "com.mitchellh.ghostty",
-      "key": "return"
+      "type": "runShellCommand",
+      "command": "osascript -e 'tell application \"Terminal\" to do script \"cd /Users/umeboshi/Git/clock-playground && npm run workstream\"' -e 'tell application \"Terminal\" to activate'"
     },
     {
       "type": "runShellCommand",
