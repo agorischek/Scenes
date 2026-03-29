@@ -28,7 +28,13 @@ Scenes is a native macOS menu bar app for setting up repeatable workspace layout
    xcodebuild -project Scenes.xcodeproj -scheme Scenes -configuration Debug build
    ```
 
-3. Create a scene directory:
+3. Install the app to a stable location and relaunch it:
+
+   ```bash
+   ./install-scenes.sh
+   ```
+
+4. Create a scene directory:
 
    ```bash
    mkdir -p ~/Scenes
