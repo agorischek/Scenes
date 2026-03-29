@@ -1,0 +1,29 @@
+{
+  "name": "Demo State",
+  "steps": [
+    {
+      "type": "launchApp",
+      "applicationName": "Terminal"
+    },
+    {
+      "type": "delay",
+      "seconds": 1.0
+    },
+    {
+      "type": "runShellCommand",
+      "command": "echo 'Scenes is running' > /tmp/scenes-demo.txt && open -a Terminal"
+    },
+    {
+      "type": "moveWindow",
+      "applicationName": "Terminal",
+      "x": 40,
+      "y": 80,
+      "width": 900,
+      "height": 680
+    },
+    {
+      "type": "openURL",
+      "url": "https://www.apple.com"
+    }
+  ]
+}
