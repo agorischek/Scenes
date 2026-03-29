@@ -7,6 +7,7 @@ import Foundation
 final class SceneRunner: ObservableObject {
     @Published private(set) var isRunning = false
     @Published private(set) var statusMessage = "Idle"
+    private var hasRequestedAccessibilityPrompt = false
 
     func run(scene: SceneDefinition) {
         guard !isRunning else { return }
@@ -30,10 +31,29 @@ final class SceneRunner: ObservableObject {
         }
     }
 
+    func hasAccessibilityAccess() -> Bool {
+        AXIsProcessTrusted()
+    }
+
     func requestAccessibilityIfNeeded() {
-        let promptKey = "AXTrustedCheckOptionPrompt" as CFString
-        let options = [promptKey: true] as CFDictionary
-        _ = AXIsProcessTrustedWithOptions(options)
+        guard !hasAccessibilityAccess() else { return }
+
+        if !hasRequestedAccessibilityPrompt {
+            let promptKey = "AXTrustedCheckOptionPrompt" as CFString
+            let options = [promptKey: true] as CFDictionary
+            _ = AXIsProcessTrustedWithOptions(options)
+            hasRequestedAccessibilityPrompt = true
+        }
+
+        openAccessibilitySettings()
+    }
+
+    func openAccessibilitySettings() {
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") else {
+            return
+        }
+
+        NSWorkspace.shared.open(url)
     }
 
     private func execute(scene: SceneDefinition) async throws {
@@ -113,9 +133,7 @@ final class SceneRunner: ObservableObject {
     }
 
     private func moveWindow(step: SceneStep) throws {
-        requestAccessibilityIfNeeded()
-
-        guard AXIsProcessTrusted() else {
+        guard hasAccessibilityAccess() else {
             throw SceneRunnerError.accessibilityPermissionRequired
         }
 
@@ -135,9 +153,7 @@ final class SceneRunner: ObservableObject {
     }
 
     private func moveFrontmostWindow(step: SceneStep) throws {
-        requestAccessibilityIfNeeded()
-
-        guard AXIsProcessTrusted() else {
+        guard hasAccessibilityAccess() else {
             throw SceneRunnerError.accessibilityPermissionRequired
         }
 
@@ -250,7 +266,7 @@ enum SceneRunnerError: LocalizedError {
         case let .commandFailed(command, status):
             return "Command failed with status \(status): \(command)"
         case .accessibilityPermissionRequired:
-            return "Accessibility permission is required to move windows."
+            return "Accessibility permission is required to move windows. Use Accessibility Settings from the Scenes menu, then relaunch Scenes if needed."
         case let .windowNotFound(app):
             return "No movable window found for \(app)."
         case .windowEnumerationFailed:

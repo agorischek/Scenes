@@ -68,6 +68,13 @@ struct SceneMenuView: View {
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
+            if !runner.hasAccessibilityAccess() {
+                Text("Window moves need Accessibility access.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
             Divider()
 
             MenuActionRow(title: "Quit Scenes", systemImage: "xmark.rectangle") {
