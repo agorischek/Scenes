@@ -345,6 +345,7 @@ final class SceneRunner: ObservableObject {
         }
 
         let visibleFrame = screen.visibleFrame
+        let topInset = screen.frame.maxY - visibleFrame.maxY
 
         guard
             let xFraction = step.xFraction,
@@ -358,7 +359,7 @@ final class SceneRunner: ObservableObject {
         return WindowGeometry(
             position: CGPoint(
                 x: visibleFrame.minX + (visibleFrame.width * xFraction),
-                y: visibleFrame.minY + (visibleFrame.height * yFraction)
+                y: topInset + (visibleFrame.height * yFraction)
             ),
             size: CGSize(
                 width: visibleFrame.width * widthFraction,
