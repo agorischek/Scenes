@@ -19,6 +19,8 @@ struct SceneStep: Codable, Hashable {
     let bundleIdentifier: String?
     let command: String?
     let url: String?
+    let text: String?
+    let key: String?
     let seconds: Double?
     let x: Double?
     let y: Double?
@@ -37,4 +39,6 @@ enum SceneStepType: String, Codable, Hashable {
     case delay
     case moveWindow
     case moveFrontmostWindow
+    case typeText
+    case pressKey
 }

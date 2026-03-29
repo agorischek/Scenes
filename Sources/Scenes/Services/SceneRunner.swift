@@ -76,6 +76,10 @@ final class SceneRunner: ObservableObject {
             try moveWindow(step: step)
         case .moveFrontmostWindow:
             try moveFrontmostWindow(step: step)
+        case .typeText:
+            try typeText(step.text)
+        case .pressKey:
+            try pressKey(step.key)
         }
     }
 
@@ -132,6 +136,40 @@ final class SceneRunner: ObservableObject {
         try await Task.sleep(for: .seconds(seconds))
     }
 
+    private func typeText(_ text: String?) throws {
+        guard hasAccessibilityAccess() else {
+            throw SceneRunnerError.accessibilityPermissionRequired
+        }
+
+        guard let text, !text.isEmpty else {
+            throw SceneRunnerError.invalidStep("typeText requires text")
+        }
+
+        for scalar in text.unicodeScalars {
+            try postTextEvent(String(scalar))
+        }
+    }
+
+    private func pressKey(_ key: String?) throws {
+        guard hasAccessibilityAccess() else {
+            throw SceneRunnerError.accessibilityPermissionRequired
+        }
+
+        let key = (key ?? "return").lowercased()
+        switch key {
+        case "return", "enter":
+            try postKeyCode(36)
+        case "tab":
+            try postKeyCode(48)
+        case "space":
+            try postKeyCode(49)
+        case "escape", "esc":
+            try postKeyCode(53)
+        default:
+            throw SceneRunnerError.invalidStep("Unsupported key: \(key)")
+        }
+    }
+
     private func moveWindow(step: SceneStep) throws {
         guard hasAccessibilityAccess() else {
             throw SceneRunnerError.accessibilityPermissionRequired
@@ -184,6 +222,28 @@ final class SceneRunner: ObservableObject {
 
         AXUIElementSetAttributeValue(window, kAXPositionAttribute as CFString, positionValue)
         AXUIElementSetAttributeValue(window, kAXSizeAttribute as CFString, sizeValue)
+    }
+
+    private func postTextEvent(_ text: String) throws {
+        guard let down = CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: true),
+              let up = CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: false) else {
+            throw SceneRunnerError.inputSynthesisFailed
+        }
+
+        down.keyboardSetUnicodeString(stringLength: text.utf16.count, unicodeString: Array(text.utf16))
+        up.keyboardSetUnicodeString(stringLength: text.utf16.count, unicodeString: Array(text.utf16))
+        down.post(tap: .cghidEventTap)
+        up.post(tap: .cghidEventTap)
+    }
+
+    private func postKeyCode(_ keyCode: CGKeyCode) throws {
+        guard let down = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: true),
+              let up = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: false) else {
+            throw SceneRunnerError.inputSynthesisFailed
+        }
+
+        down.post(tap: .cghidEventTap)
+        up.post(tap: .cghidEventTap)
     }
 
     private func copyWindows(for appElement: AXUIElement) throws -> [AXUIElement] {
@@ -254,6 +314,7 @@ enum SceneRunnerError: LocalizedError {
     case accessibilityPermissionRequired
     case windowNotFound(String)
     case windowEnumerationFailed
+    case inputSynthesisFailed
 
     var errorDescription: String? {
         switch self {
@@ -271,6 +332,8 @@ enum SceneRunnerError: LocalizedError {
             return "No movable window found for \(app)."
         case .windowEnumerationFailed:
             return "Could not read app windows through Accessibility."
+        case .inputSynthesisFailed:
+            return "Could not synthesize keyboard input."
         }
     }
 }

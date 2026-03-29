@@ -2,12 +2,12 @@
   "name": "Clock Playground Demo",
   "steps": [
     {
-      "type": "runShellCommand",
-      "command": "open -na /Applications/Ghostty.app --args -e zsh -lc 'cd /Users/umeboshi/Git/clock-playground && npm run workstream'"
+      "type": "launchApp",
+      "bundleIdentifier": "com.mitchellh.ghostty"
     },
     {
       "type": "delay",
-      "seconds": 2.0
+      "seconds": 1.5
     },
     {
       "type": "moveWindow",
@@ -16,6 +16,18 @@
       "yFraction": 0.0,
       "widthFraction": 0.5,
       "heightFraction": 1.0
+    },
+    {
+      "type": "delay",
+      "seconds": 0.5
+    },
+    {
+      "type": "typeText",
+      "text": "cd /Users/umeboshi/Git/clock-playground && npm run workstream"
+    },
+    {
+      "type": "pressKey",
+      "key": "return"
     },
     {
       "type": "runShellCommand",
