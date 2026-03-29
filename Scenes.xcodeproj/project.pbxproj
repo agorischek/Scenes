@@ -13,13 +13,17 @@
 		9499DF90A4F32659AB49CC53 /* MenuActionRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3430CB83AC1DC27466F038C /* MenuActionRow.swift */; };
 		98657E4EBFBE0661EB2F685D /* SceneStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE06C5BF54177A5CACC44B78 /* SceneStore.swift */; };
 		99E62739D6A432062ADAD893 /* SceneEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = B08611FF7151135C02A1018B /* SceneEnvironment.swift */; };
+		A16783C70A1D0B13988DC226 /* OverlayWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 730B1D6CA7D944FA23B03085 /* OverlayWindowController.swift */; };
+		AC808038EE39E1865060D705 /* SceneOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15BF141F798F1D5AFC9F4737 /* SceneOverlayView.swift */; };
 		C8D8D3DD43F7CC37E110443D /* StatusItemController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9788F24D211887133070667 /* StatusItemController.swift */; };
 		D0CB1A04CBF4470CF2E32DC5 /* SceneRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20007363F53180B576C1545 /* SceneRunner.swift */; };
 		DF0F093162A015FD809DABC4 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = E77EF3483FF326AADFA7E5C8 /* AppDelegate.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		15BF141F798F1D5AFC9F4737 /* SceneOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneOverlayView.swift; sourceTree = "<group>"; };
 		663CEDA8291B96587CA51540 /* ScenesApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScenesApp.swift; sourceTree = "<group>"; };
+		730B1D6CA7D944FA23B03085 /* OverlayWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverlayWindowController.swift; sourceTree = "<group>"; };
 		95930E5554702EA7D0563CF2 /* SceneMenuView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneMenuView.swift; sourceTree = "<group>"; };
 		A71A6437D2E5E084FC3F84F5 /* SceneDefinition.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDefinition.swift; sourceTree = "<group>"; };
 		B08611FF7151135C02A1018B /* SceneEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneEnvironment.swift; sourceTree = "<group>"; };
@@ -58,6 +62,7 @@
 			children = (
 				F3430CB83AC1DC27466F038C /* MenuActionRow.swift */,
 				95930E5554702EA7D0563CF2 /* SceneMenuView.swift */,
+				15BF141F798F1D5AFC9F4737 /* SceneOverlayView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -74,6 +79,7 @@
 			isa = PBXGroup;
 			children = (
 				E77EF3483FF326AADFA7E5C8 /* AppDelegate.swift */,
+				730B1D6CA7D944FA23B03085 /* OverlayWindowController.swift */,
 				B08611FF7151135C02A1018B /* SceneEnvironment.swift */,
 				663CEDA8291B96587CA51540 /* ScenesApp.swift */,
 				E9788F24D211887133070667 /* StatusItemController.swift */,
@@ -158,9 +164,11 @@
 			files = (
 				DF0F093162A015FD809DABC4 /* AppDelegate.swift in Sources */,
 				9499DF90A4F32659AB49CC53 /* MenuActionRow.swift in Sources */,
+				A16783C70A1D0B13988DC226 /* OverlayWindowController.swift in Sources */,
 				85EB895EEF98F09D20E52359 /* SceneDefinition.swift in Sources */,
 				99E62739D6A432062ADAD893 /* SceneEnvironment.swift in Sources */,
 				43E40306C7DFD37C51B9BD36 /* SceneMenuView.swift in Sources */,
+				AC808038EE39E1865060D705 /* SceneOverlayView.swift in Sources */,
 				D0CB1A04CBF4470CF2E32DC5 /* SceneRunner.swift in Sources */,
 				98657E4EBFBE0661EB2F685D /* SceneStore.swift in Sources */,
 				067B60E6254A7C6DAFC1DB26 /* ScenesApp.swift in Sources */,

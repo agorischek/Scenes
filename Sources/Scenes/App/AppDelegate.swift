@@ -6,11 +6,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private let environment = SceneEnvironment.shared
     private let statusItemController = StatusItemController()
+    private var overlayWindowController: OverlayWindowController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
 
         environment.bootstrap()
+        overlayWindowController = OverlayWindowController(runner: environment.runner)
         statusItemController.install(
             rootView: SceneMenuView()
                 .environmentObject(environment.store)

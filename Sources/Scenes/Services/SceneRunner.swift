@@ -3,29 +3,61 @@ import ApplicationServices
 import Combine
 import Foundation
 
+enum SceneExecutionState: Equatable {
+    case idle
+    case running
+    case succeeded
+    case failed
+}
+
 @MainActor
 final class SceneRunner: ObservableObject {
     @Published private(set) var isRunning = false
     @Published private(set) var statusMessage = "Idle"
+    @Published private(set) var currentSceneName: String?
+    @Published private(set) var currentStepLabel: String?
+    @Published private(set) var currentStepIndex = 0
+    @Published private(set) var totalSteps = 0
+    @Published private(set) var executionState: SceneExecutionState = .idle
     private var hasRequestedAccessibilityPrompt = false
+    private var runToken = UUID()
 
     func run(scene: SceneDefinition) {
         guard !isRunning else { return }
 
+        let runToken = UUID()
+        self.runToken = runToken
         isRunning = true
+        executionState = .running
+        currentSceneName = scene.name
+        totalSteps = scene.steps.count
+        currentStepIndex = 0
+        currentStepLabel = totalSteps > 0 ? "Preparing scene" : "No steps"
         statusMessage = "Running \(scene.name)..."
 
         Task {
             do {
-                try await execute(scene: scene)
+                try await execute(scene: scene, runToken: runToken)
                 await MainActor.run {
+                    guard self.runToken == runToken else { return }
                     self.statusMessage = "Finished \(scene.name)"
                     self.isRunning = false
+                    self.executionState = .succeeded
+                    self.currentStepIndex = self.totalSteps
+                    self.currentStepLabel = "Complete"
+                }
+                try? await Task.sleep(for: .seconds(2))
+                await MainActor.run {
+                    guard self.runToken == runToken, !self.isRunning, self.executionState == .succeeded else { return }
+                    self.resetExecutionDetails()
                 }
             } catch {
                 await MainActor.run {
+                    guard self.runToken == runToken else { return }
                     self.statusMessage = "Failed: \(error.localizedDescription)"
                     self.isRunning = false
+                    self.executionState = .failed
+                    self.currentStepLabel = error.localizedDescription
                 }
             }
         }
@@ -56,8 +88,15 @@ final class SceneRunner: ObservableObject {
         NSWorkspace.shared.open(url)
     }
 
-    private func execute(scene: SceneDefinition) async throws {
-        for step in scene.steps {
+    private func execute(scene: SceneDefinition, runToken: UUID) async throws {
+        for (index, step) in scene.steps.enumerated() {
+            await MainActor.run {
+                guard self.runToken == runToken else { return }
+                self.currentStepIndex = index + 1
+                self.currentStepLabel = self.description(for: step)
+                self.statusMessage = "Step \(index + 1) of \(scene.steps.count): \(self.currentStepLabel ?? "")"
+            }
+
             try await execute(step: step)
         }
     }
@@ -567,6 +606,49 @@ final class SceneRunner: ObservableObject {
         }
 
         return CommandResult(stdout: stdout, stderr: stderr)
+    }
+
+    private func description(for step: SceneStep) -> String {
+        switch step.type {
+        case .launchApp:
+            return "Opening \(step.applicationName ?? step.bundleIdentifier ?? "app")"
+        case .launchIOSSimulatorApp:
+            return "Launching \(step.scheme ?? step.bundleIdentifier ?? "iOS app") on \(step.device ?? "Simulator")"
+        case .runTerminalCommand:
+            return "Running Terminal command"
+        case .runGhosttyCommand:
+            return "Running Ghostty command"
+        case .openURL:
+            return "Opening \(step.url ?? "URL")"
+        case .runShellCommand:
+            return "Running shell command"
+        case .delay:
+            return "Waiting \(formattedSeconds(step.seconds ?? 1.0))"
+        case .moveWindow:
+            return "Positioning \(step.applicationName ?? step.bundleIdentifier ?? "window")"
+        case .moveFrontmostWindow:
+            return "Positioning frontmost window"
+        case .typeText:
+            return "Sending text input"
+        case .pressKey:
+            return "Pressing \(step.key ?? "return")"
+        }
+    }
+
+    private func formattedSeconds(_ seconds: Double) -> String {
+        if seconds.rounded(.towardZero) == seconds {
+            return "\(Int(seconds))s"
+        }
+        return String(format: "%.1fs", seconds)
+    }
+
+    private func resetExecutionDetails() {
+        currentSceneName = nil
+        currentStepLabel = nil
+        currentStepIndex = 0
+        totalSteps = 0
+        executionState = .idle
+        statusMessage = "Idle"
     }
 
     private func geometry(for step: SceneStep) -> WindowGeometry {
