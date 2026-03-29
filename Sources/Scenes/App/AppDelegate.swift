@@ -2,6 +2,8 @@ import AppKit
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    static let closePopoverNotification = Notification.Name("ScenesClosePopover")
+
     private let environment = SceneEnvironment.shared
     private let statusItemController = StatusItemController()
 
@@ -16,6 +18,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             target: self,
             action: #selector(togglePopover(_:))
         )
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(closePopover(_:)),
+            name: Self.closePopoverNotification,
+            object: nil
+        )
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {
@@ -29,5 +38,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc
     private func togglePopover(_ sender: AnyObject?) {
         statusItemController.togglePopover(sender: sender)
+    }
+
+    @objc
+    private func closePopover(_ notification: Notification) {
+        statusItemController.closePopover()
     }
 }

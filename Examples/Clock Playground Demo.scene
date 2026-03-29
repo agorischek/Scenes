@@ -31,10 +31,12 @@
     },
     {
       "type": "typeText",
+      "bundleIdentifier": "com.mitchellh.ghostty",
       "text": "cd /Users/umeboshi/Git/clock-playground && npm run workstream"
     },
     {
       "type": "pressKey",
+      "bundleIdentifier": "com.mitchellh.ghostty",
       "key": "return"
     },
     {

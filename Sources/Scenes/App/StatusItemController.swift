@@ -40,4 +40,10 @@ final class StatusItemController {
             popover.contentViewController?.view.window?.makeKey()
         }
     }
+
+    func closePopover(sender: AnyObject? = nil) {
+        if popover.isShown {
+            popover.performClose(sender)
+        }
+    }
 }

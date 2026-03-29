@@ -31,6 +31,7 @@ struct SceneMenuView: View {
                             systemImage: "play.circle",
                             isEnabled: !runner.isRunning
                         ) {
+                            NotificationCenter.default.post(name: AppDelegate.closePopoverNotification, object: nil)
                             runner.run(scene: scene)
                         }
                     }

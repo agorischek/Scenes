@@ -77,9 +77,9 @@ final class SceneRunner: ObservableObject {
         case .moveFrontmostWindow:
             try moveFrontmostWindow(step: step)
         case .typeText:
-            try typeText(step.text)
+            try await typeText(step: step)
         case .pressKey:
-            try pressKey(step.key)
+            try await pressKey(step: step)
         }
     }
 
@@ -136,11 +136,14 @@ final class SceneRunner: ObservableObject {
         try await Task.sleep(for: .seconds(seconds))
     }
 
-    private func typeText(_ text: String?) throws {
+    private func typeText(step: SceneStep) async throws {
         guard hasAccessibilityAccess() else {
             throw SceneRunnerError.accessibilityPermissionRequired
         }
 
+        try await focusAppForInput(using: step)
+
+        let text = step.text
         guard let text, !text.isEmpty else {
             throw SceneRunnerError.invalidStep("typeText requires text")
         }
@@ -150,13 +153,15 @@ final class SceneRunner: ObservableObject {
         }
     }
 
-    private func pressKey(_ key: String?) throws {
+    private func pressKey(step: SceneStep) async throws {
         guard hasAccessibilityAccess() else {
             throw SceneRunnerError.accessibilityPermissionRequired
         }
 
-        let key = (key ?? "return").lowercased()
-        switch key {
+        try await focusAppForInput(using: step)
+
+        let normalizedKey = (step.key ?? "return").lowercased()
+        switch normalizedKey {
         case "return", "enter":
             try postKeyCode(36)
         case "tab":
@@ -166,7 +171,7 @@ final class SceneRunner: ObservableObject {
         case "escape", "esc":
             try postKeyCode(53)
         default:
-            throw SceneRunnerError.invalidStep("Unsupported key: \(key)")
+            throw SceneRunnerError.invalidStep("Unsupported key: \(normalizedKey)")
         }
     }
 
@@ -265,6 +270,16 @@ final class SceneRunner: ObservableObject {
         return NSWorkspace.shared.runningApplications.first {
             $0.localizedName == applicationName
         }
+    }
+
+    private func focusAppForInput(using step: SceneStep) async throws {
+        if let app = findRunningApp(applicationName: step.applicationName, bundleIdentifier: step.bundleIdentifier) {
+            app.activate()
+            try await Task.sleep(for: .milliseconds(250))
+            return
+        }
+
+        try await Task.sleep(for: .milliseconds(100))
     }
 
     private func geometry(for step: SceneStep) -> WindowGeometry {
