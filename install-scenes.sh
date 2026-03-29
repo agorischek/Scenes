@@ -20,6 +20,7 @@ xcodebuild \
 osascript -e 'tell application id "dev.umeboshi.Scenes" to quit' >/dev/null 2>&1 || true
 sleep 1
 pkill -f '/Scenes.app/Contents/MacOS/Scenes' || true
+pkill -9 -f '/Library/Developer/Xcode/DerivedData/Scenes-.*/Build/Products/Debug/Scenes.app/Contents/MacOS/Scenes' || true
 rm -rf "$APP_INSTALL_PATH"
 ditto "$APP_BUILD_PATH" "$APP_INSTALL_PATH"
 "$APP_EXECUTABLE_PATH" >/dev/null 2>&1 &
