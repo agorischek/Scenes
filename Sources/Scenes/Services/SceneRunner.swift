@@ -66,6 +66,8 @@ final class SceneRunner: ObservableObject {
         switch step.type {
         case .launchApp:
             try launchApp(named: step.applicationName, bundleIdentifier: step.bundleIdentifier)
+        case .runTerminalCommand:
+            try runTerminalCommand(step.command)
         case .openURL:
             try openURL(step.url)
         case .runShellCommand:
@@ -112,6 +114,32 @@ final class SceneRunner: ObservableObject {
         }
 
         NSWorkspace.shared.open(url)
+    }
+
+    private func runTerminalCommand(_ command: String?) throws {
+        guard let command, !command.isEmpty else {
+            throw SceneRunnerError.invalidStep("runTerminalCommand requires command")
+        }
+
+        let escapedCommand = command
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+
+        let source = """
+        tell application "Terminal"
+          activate
+          if not (exists window 1) then reopen
+          do script "\(escapedCommand)" in window 1
+        end tell
+        """
+
+        var error: NSDictionary?
+        let script = NSAppleScript(source: source)
+        script?.executeAndReturnError(&error)
+
+        if let error {
+            throw SceneRunnerError.appleScriptFailed(error.description)
+        }
     }
 
     private func runShellCommand(_ command: String?) throws {
@@ -326,6 +354,7 @@ enum SceneRunnerError: LocalizedError {
     case appNotFound(String)
     case appNotRunning(String)
     case commandFailed(String, Int32)
+    case appleScriptFailed(String)
     case accessibilityPermissionRequired
     case windowNotFound(String)
     case windowEnumerationFailed
@@ -341,6 +370,8 @@ enum SceneRunnerError: LocalizedError {
             return "App is not running: \(app)"
         case let .commandFailed(command, status):
             return "Command failed with status \(status): \(command)"
+        case let .appleScriptFailed(message):
+            return "AppleScript failed: \(message)"
         case .accessibilityPermissionRequired:
             return "Accessibility permission is required to move windows. Use Accessibility Settings from the Scenes menu, then relaunch Scenes if needed."
         case let .windowNotFound(app):
