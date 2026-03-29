@@ -2,6 +2,14 @@
   "name": "Clock Playground Demo",
   "steps": [
     {
+      "type": "runShellCommand",
+      "command": "pkill -x ghostty || true"
+    },
+    {
+      "type": "delay",
+      "seconds": 1.0
+    },
+    {
       "type": "launchApp",
       "bundleIdentifier": "com.mitchellh.ghostty"
     },
