@@ -68,6 +68,8 @@ final class SceneRunner: ObservableObject {
             try launchApp(named: step.applicationName, bundleIdentifier: step.bundleIdentifier)
         case .runTerminalCommand:
             try runTerminalCommand(step.command)
+        case .runGhosttyCommand:
+            try runGhosttyCommand(step.command)
         case .openURL:
             try openURL(step.url)
         case .runShellCommand:
@@ -145,6 +147,22 @@ final class SceneRunner: ObservableObject {
 
         guard process.terminationStatus == 0 else {
             throw SceneRunnerError.commandFailed("open -a Terminal \(scriptURL.path)", process.terminationStatus)
+        }
+    }
+
+    private func runGhosttyCommand(_ command: String?) throws {
+        guard let command, !command.isEmpty else {
+            throw SceneRunnerError.invalidStep("runGhosttyCommand requires command")
+        }
+
+        let process = Process()
+        process.executableURL = URL(filePath: "/usr/bin/open")
+        process.arguments = ["-na", "/Applications/Ghostty.app", "--args", "-e", "zsh", "-lc", command]
+        try process.run()
+        process.waitUntilExit()
+
+        guard process.terminationStatus == 0 else {
+            throw SceneRunnerError.commandFailed("open -na /Applications/Ghostty.app --args -e zsh -lc \(command)", process.terminationStatus)
         }
     }
 

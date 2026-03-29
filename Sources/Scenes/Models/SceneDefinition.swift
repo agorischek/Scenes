@@ -35,6 +35,7 @@ struct SceneStep: Codable, Hashable {
 enum SceneStepType: String, Codable, Hashable {
     case launchApp
     case runTerminalCommand
+    case runGhosttyCommand
     case openURL
     case runShellCommand
     case delay
