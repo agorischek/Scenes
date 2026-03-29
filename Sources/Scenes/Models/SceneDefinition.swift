@@ -24,6 +24,10 @@ struct SceneStep: Codable, Hashable {
     let y: Double?
     let width: Double?
     let height: Double?
+    let xFraction: Double?
+    let yFraction: Double?
+    let widthFraction: Double?
+    let heightFraction: Double?
 }
 
 enum SceneStepType: String, Codable, Hashable {
@@ -32,4 +36,5 @@ enum SceneStepType: String, Codable, Hashable {
     case runShellCommand
     case delay
     case moveWindow
+    case moveFrontmostWindow
 }

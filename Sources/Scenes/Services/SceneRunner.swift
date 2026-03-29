@@ -54,6 +54,8 @@ final class SceneRunner: ObservableObject {
             try await delay(seconds: step.seconds)
         case .moveWindow:
             try moveWindow(step: step)
+        case .moveFrontmostWindow:
+            try moveFrontmostWindow(step: step)
         }
     }
 
@@ -127,11 +129,36 @@ final class SceneRunner: ObservableObject {
             throw SceneRunnerError.windowNotFound(app.localizedName ?? "Unknown")
         }
 
-        let position = CGPoint(x: step.x ?? 40, y: step.y ?? 40)
-        let size = CGSize(width: step.width ?? 900, height: step.height ?? 700)
+        let geometry = geometry(for: step)
+        try applyGeometry(geometry, to: window)
+        app.activate()
+    }
 
-        var mutablePosition = position
-        var mutableSize = size
+    private func moveFrontmostWindow(step: SceneStep) throws {
+        requestAccessibilityIfNeeded()
+
+        guard AXIsProcessTrusted() else {
+            throw SceneRunnerError.accessibilityPermissionRequired
+        }
+
+        guard let app = NSWorkspace.shared.frontmostApplication else {
+            throw SceneRunnerError.appNotRunning("frontmost application")
+        }
+
+        let appElement = AXUIElementCreateApplication(app.processIdentifier)
+        let windows = try copyWindows(for: appElement)
+        guard let window = windows.first else {
+            throw SceneRunnerError.windowNotFound(app.localizedName ?? "frontmost application")
+        }
+
+        let geometry = geometry(for: step)
+        try applyGeometry(geometry, to: window)
+        app.activate()
+    }
+
+    private func applyGeometry(_ geometry: WindowGeometry, to window: AXUIElement) throws {
+        var mutablePosition = geometry.position
+        var mutableSize = geometry.size
         let positionValue = AXValueCreate(.cgPoint, &mutablePosition)
         let sizeValue = AXValueCreate(.cgSize, &mutableSize)
 
@@ -141,7 +168,6 @@ final class SceneRunner: ObservableObject {
 
         AXUIElementSetAttributeValue(window, kAXPositionAttribute as CFString, positionValue)
         AXUIElementSetAttributeValue(window, kAXSizeAttribute as CFString, sizeValue)
-        NSRunningApplication(processIdentifier: app.processIdentifier)?.activate()
     }
 
     private func copyWindows(for appElement: AXUIElement) throws -> [AXUIElement] {
@@ -164,6 +190,44 @@ final class SceneRunner: ObservableObject {
             $0.localizedName == applicationName
         }
     }
+
+    private func geometry(for step: SceneStep) -> WindowGeometry {
+        let fallback = WindowGeometry(
+            position: CGPoint(x: step.x ?? 40, y: step.y ?? 40),
+            size: CGSize(width: step.width ?? 900, height: step.height ?? 700)
+        )
+
+        guard let screen = NSScreen.main ?? NSScreen.screens.first else {
+            return fallback
+        }
+
+        let visibleFrame = screen.visibleFrame
+
+        guard
+            let xFraction = step.xFraction,
+            let yFraction = step.yFraction,
+            let widthFraction = step.widthFraction,
+            let heightFraction = step.heightFraction
+        else {
+            return fallback
+        }
+
+        return WindowGeometry(
+            position: CGPoint(
+                x: visibleFrame.minX + (visibleFrame.width * xFraction),
+                y: visibleFrame.minY + (visibleFrame.height * yFraction)
+            ),
+            size: CGSize(
+                width: visibleFrame.width * widthFraction,
+                height: visibleFrame.height * heightFraction
+            )
+        )
+    }
+}
+
+private struct WindowGeometry {
+    let position: CGPoint
+    let size: CGSize
 }
 
 enum SceneRunnerError: LocalizedError {
