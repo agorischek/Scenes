@@ -19,6 +19,7 @@ struct SceneStep: Codable, Hashable {
     let bundleIdentifier: String?
     let command: String?
     let arguments: [String]?
+    let buildStrategy: IOSBuildStrategy?
     let url: String?
     let text: String?
     let key: String?
@@ -38,6 +39,11 @@ struct SceneStep: Codable, Hashable {
     let yFraction: Double?
     let widthFraction: Double?
     let heightFraction: Double?
+}
+
+enum IOSBuildStrategy: String, Codable, Hashable {
+    case alwaysBuild
+    case useExistingBuildIfPresent
 }
 
 enum SceneStepType: String, Codable, Hashable {

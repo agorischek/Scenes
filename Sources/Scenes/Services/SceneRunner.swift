@@ -188,6 +188,7 @@ final class SceneRunner: ObservableObject {
     private func launchIOSSimulatorApp(step: SceneStep) throws {
         let deviceName = step.device ?? "iPhone 17"
         let showSimulator = step.showSimulator ?? true
+        let buildStrategy = step.buildStrategy ?? .alwaysBuild
 
         if showSimulator {
             let openProcess = Process()
@@ -208,19 +209,36 @@ final class SceneRunner: ObservableObject {
             let configuration = step.configuration ?? "Debug"
             let destination = step.destination ?? "generic/platform=iOS Simulator"
 
-            try buildIOSProject(
+            var artifact = try resolveIOSBuildArtifact(
                 projectPath: projectPath,
                 scheme: scheme,
                 configuration: configuration,
                 destination: destination
             )
 
-            let artifact = try resolveIOSBuildArtifact(
-                projectPath: projectPath,
-                scheme: scheme,
-                configuration: configuration,
-                destination: destination
-            )
+            let shouldBuild: Bool
+            switch buildStrategy {
+            case .alwaysBuild:
+                shouldBuild = true
+            case .useExistingBuildIfPresent:
+                shouldBuild = !FileManager.default.fileExists(atPath: artifact.appPath)
+            }
+
+            if shouldBuild {
+                try buildIOSProject(
+                    projectPath: projectPath,
+                    scheme: scheme,
+                    configuration: configuration,
+                    destination: destination
+                )
+
+                artifact = try resolveIOSBuildArtifact(
+                    projectPath: projectPath,
+                    scheme: scheme,
+                    configuration: configuration,
+                    destination: destination
+                )
+            }
 
             appPath = artifact.appPath
             if bundleIdentifier == nil {
