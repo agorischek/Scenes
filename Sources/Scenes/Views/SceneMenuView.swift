@@ -5,76 +5,77 @@ struct SceneMenuView: View {
     @EnvironmentObject private var runner: SceneRunner
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Scenes")
-                        .font(.headline)
-                    Text(store.scenesDirectory.path)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
+        VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Scenes")
+                    .font(.system(size: 16, weight: .semibold))
 
-                Spacer()
+                Text(store.scenesDirectory.path)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
 
-            if let lastError = store.lastError {
-                Text(lastError)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-            }
+            Divider()
 
             if store.scenes.isEmpty {
                 Text("No .scene files found in ~/Scenes")
-                    .font(.subheadline)
+                    .font(.system(size: 12))
                     .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             } else {
-                ForEach(store.scenes) { scene in
-                    Button {
-                        runner.run(scene: scene)
-                    } label: {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(scene.name)
-                            if let url = scene.url {
-                                Text(url.lastPathComponent)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
+                VStack(spacing: 0) {
+                    ForEach(store.scenes) { scene in
+                        MenuActionRow(
+                            title: scene.name,
+                            systemImage: "play.circle",
+                            isEnabled: !runner.isRunning
+                        ) {
+                            runner.run(scene: scene)
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    .buttonStyle(.borderless)
-                    .disabled(runner.isRunning)
                 }
             }
 
             Divider()
 
-            Text(runner.statusMessage)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-            HStack {
-                Button("Refresh") {
-                    store.refresh()
+            VStack(spacing: 0) {
+                MenuActionRow(title: "Refresh", systemImage: "arrow.clockwise") {
+                store.refresh()
                 }
 
-                Button("Open Scenes Folder") {
+                MenuActionRow(title: "Open Scenes Folder...", systemImage: "folder") {
                     NSWorkspace.shared.open(store.scenesDirectory)
                 }
 
-                Button("Accessibility") {
+                MenuActionRow(title: "Accessibility Settings...", systemImage: "hand.raised") {
                     runner.requestAccessibilityIfNeeded()
                 }
             }
 
-            Button("Quit Scenes") {
-                NSApplication.shared.terminate(nil)
+            if let lastError = store.lastError {
+                Divider()
+                Text("Error: \(lastError)")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            Divider()
+
+            Text(runner.statusMessage)
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Divider()
+
+            MenuActionRow(title: "Quit Scenes", systemImage: "xmark.rectangle") {
+                    NSApplication.shared.terminate(nil)
             }
         }
         .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(width: 344, alignment: .leading)
         .onAppear {
             SceneEnvironment.shared.bootstrap()
         }
