@@ -4,7 +4,7 @@ Scenes is a native macOS menu bar app for setting up repeatable workspace layout
 
 ## What it does
 
-- Auto-discovers `.scene` files from `~/Scenes`
+- Auto-discovers `.scene` files from `~/Documents/Scenes`
 - Lets you run scenes from the menu bar
 - Opens `.scene` documents when you click them in Finder
 - Supports a first set of actions:
@@ -37,8 +37,8 @@ Scenes is a native macOS menu bar app for setting up repeatable workspace layout
 4. Create a scene directory:
 
    ```bash
-   mkdir -p ~/Scenes
-   cp Examples/Demo.scene ~/Scenes/
+   mkdir -p ~/Documents/Scenes
+   cp Examples/Demo.scene ~/Documents/Scenes/
    ```
 
 ## Scene format

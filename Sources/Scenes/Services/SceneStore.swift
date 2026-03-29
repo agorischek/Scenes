@@ -10,7 +10,9 @@ final class SceneStore: ObservableObject {
 
     var scenesDirectory: URL {
         let home = fileManager.homeDirectoryForCurrentUser
-        return home.appendingPathComponent("Scenes", isDirectory: true)
+        return home
+            .appendingPathComponent("Documents", isDirectory: true)
+            .appendingPathComponent("Scenes", isDirectory: true)
     }
 
     func refresh() {

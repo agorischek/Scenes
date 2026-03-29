@@ -19,7 +19,7 @@ struct SceneMenuView: View {
             Divider()
 
             if store.scenes.isEmpty {
-                Text("No .scene files found in ~/Scenes")
+                Text("No .scene files found in ~/Documents/Scenes")
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
