@@ -18,10 +18,18 @@ struct SceneStep: Codable, Hashable {
     let applicationName: String?
     let bundleIdentifier: String?
     let command: String?
+    let arguments: [String]?
     let url: String?
     let text: String?
     let key: String?
     let seconds: Double?
+    let projectPath: String?
+    let scheme: String?
+    let device: String?
+    let destination: String?
+    let configuration: String?
+    let appPath: String?
+    let showSimulator: Bool?
     let x: Double?
     let y: Double?
     let width: Double?
@@ -34,6 +42,7 @@ struct SceneStep: Codable, Hashable {
 
 enum SceneStepType: String, Codable, Hashable {
     case launchApp
+    case launchIOSSimulatorApp
     case runTerminalCommand
     case runGhosttyCommand
     case openURL

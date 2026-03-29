@@ -66,6 +66,8 @@ final class SceneRunner: ObservableObject {
         switch step.type {
         case .launchApp:
             try launchApp(named: step.applicationName, bundleIdentifier: step.bundleIdentifier)
+        case .launchIOSSimulatorApp:
+            try launchIOSSimulatorApp(step: step)
         case .runTerminalCommand:
             try runTerminalCommand(step.command)
         case .runGhosttyCommand:
@@ -181,6 +183,77 @@ final class SceneRunner: ObservableObject {
         guard process.terminationStatus == 0 else {
             throw SceneRunnerError.commandFailed(command, process.terminationStatus)
         }
+    }
+
+    private func launchIOSSimulatorApp(step: SceneStep) throws {
+        let deviceName = step.device ?? "iPhone 17"
+        let showSimulator = step.showSimulator ?? true
+
+        if showSimulator {
+            let openProcess = Process()
+            openProcess.executableURL = URL(filePath: "/usr/bin/open")
+            openProcess.arguments = ["-a", "Simulator"]
+            try openProcess.run()
+            openProcess.waitUntilExit()
+        }
+
+        let udid = try resolveSimulatorUDID(named: deviceName)
+        try bootSimulator(udid: udid)
+
+        var appPath = step.appPath
+        var bundleIdentifier = step.bundleIdentifier
+
+        if let projectPath = step.projectPath, !projectPath.isEmpty {
+            let scheme = step.scheme ?? "acp-remote"
+            let configuration = step.configuration ?? "Debug"
+            let destination = step.destination ?? "generic/platform=iOS Simulator"
+
+            try buildIOSProject(
+                projectPath: projectPath,
+                scheme: scheme,
+                configuration: configuration,
+                destination: destination
+            )
+
+            let artifact = try resolveIOSBuildArtifact(
+                projectPath: projectPath,
+                scheme: scheme,
+                configuration: configuration,
+                destination: destination
+            )
+
+            appPath = artifact.appPath
+            if bundleIdentifier == nil {
+                bundleIdentifier = artifact.bundleIdentifier
+            }
+        }
+
+        if let appPath, !appPath.isEmpty {
+            if let bundleIdentifier, !bundleIdentifier.isEmpty {
+                try? runCapturedCommand(
+                    executable: "/usr/bin/xcrun",
+                    arguments: ["simctl", "terminate", udid, bundleIdentifier]
+                )
+                try? runCapturedCommand(
+                    executable: "/usr/bin/xcrun",
+                    arguments: ["simctl", "uninstall", udid, bundleIdentifier]
+                )
+            }
+
+            _ = try runCapturedCommand(
+                executable: "/usr/bin/xcrun",
+                arguments: ["simctl", "install", udid, appPath]
+            )
+        }
+
+        guard let bundleIdentifier, !bundleIdentifier.isEmpty else {
+            throw SceneRunnerError.invalidStep("launchIOSSimulatorApp requires bundleIdentifier, or projectPath plus scheme that resolves one")
+        }
+
+        _ = try runCapturedCommand(
+            executable: "/usr/bin/xcrun",
+            arguments: ["simctl", "launch", udid, bundleIdentifier] + (step.arguments ?? [])
+        )
     }
 
     private func delay(seconds: Double?) async throws {
@@ -334,6 +407,150 @@ final class SceneRunner: ObservableObject {
         try await Task.sleep(for: .milliseconds(100))
     }
 
+    private func resolveSimulatorUDID(named deviceName: String) throws -> String {
+        let result = try runCapturedCommand(
+            executable: "/usr/bin/xcrun",
+            arguments: ["simctl", "list", "devices", "available", "--json"]
+        )
+
+        guard
+            let data = result.stdout.data(using: .utf8),
+            let payload = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+            let devices = payload["devices"] as? [String: Any]
+        else {
+            throw SceneRunnerError.invalidSimulatorResponse
+        }
+
+        for (runtime, entries) in devices {
+            guard runtime.contains("iOS"), let entries = entries as? [[String: Any]] else { continue }
+            for entry in entries {
+                guard let name = entry["name"] as? String, name == deviceName else { continue }
+                if let isAvailable = entry["isAvailable"] as? Bool, isAvailable == false {
+                    continue
+                }
+                if let udid = entry["udid"] as? String, !udid.isEmpty {
+                    return udid
+                }
+            }
+        }
+
+        throw SceneRunnerError.simulatorDeviceNotFound(deviceName)
+    }
+
+    private func bootSimulator(udid: String) throws {
+        do {
+            _ = try runCapturedCommand(
+                executable: "/usr/bin/xcrun",
+                arguments: ["simctl", "boot", udid]
+            )
+        } catch let error as SceneRunnerError {
+            switch error {
+            case let .commandFailed(message, _):
+                guard message.contains("Unable to boot device in current state: Booted") else {
+                    throw error
+                }
+            default:
+                throw error
+            }
+        }
+
+        _ = try runCapturedCommand(
+            executable: "/usr/bin/xcrun",
+            arguments: ["simctl", "bootstatus", udid, "-b"]
+        )
+    }
+
+    private func buildIOSProject(projectPath: String, scheme: String, configuration: String, destination: String) throws {
+        _ = try runCapturedCommand(
+            executable: "/usr/bin/xcodebuild",
+            arguments: [
+                "-project", projectPath,
+                "-scheme", scheme,
+                "-configuration", configuration,
+                "-destination", destination,
+                "build",
+            ],
+            currentDirectoryPath: URL(fileURLWithPath: projectPath).deletingLastPathComponent().path
+        )
+    }
+
+    private func resolveIOSBuildArtifact(projectPath: String, scheme: String, configuration: String, destination: String) throws -> IOSBuildArtifact {
+        let result = try runCapturedCommand(
+            executable: "/usr/bin/xcodebuild",
+            arguments: [
+                "-project", projectPath,
+                "-scheme", scheme,
+                "-configuration", configuration,
+                "-destination", destination,
+                "-showBuildSettings",
+                "-json",
+            ],
+            currentDirectoryPath: URL(fileURLWithPath: projectPath).deletingLastPathComponent().path
+        )
+
+        guard let data = result.stdout.data(using: .utf8) else {
+            throw SceneRunnerError.invalidBuildSettings
+        }
+
+        guard let payload = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+            throw SceneRunnerError.invalidBuildSettings
+        }
+
+        for entry in payload {
+            guard let settings = entry["buildSettings"] as? [String: Any] else { continue }
+            guard
+                let targetBuildDir = settings["TARGET_BUILD_DIR"] as? String,
+                let fullProductName = settings["FULL_PRODUCT_NAME"] as? String,
+                fullProductName.hasSuffix(".app")
+            else {
+                continue
+            }
+
+            let appPath = URL(fileURLWithPath: targetBuildDir).appendingPathComponent(fullProductName).path
+            let bundleIdentifier = settings["PRODUCT_BUNDLE_IDENTIFIER"] as? String
+            return IOSBuildArtifact(appPath: appPath, bundleIdentifier: bundleIdentifier)
+        }
+
+        throw SceneRunnerError.buildArtifactNotFound
+    }
+
+    private func runCapturedCommand(
+        executable: String,
+        arguments: [String],
+        currentDirectoryPath: String? = nil
+    ) throws -> CommandResult {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: executable)
+        process.arguments = arguments
+        if let currentDirectoryPath {
+            process.currentDirectoryURL = URL(fileURLWithPath: currentDirectoryPath)
+        }
+
+        let stdoutPipe = Pipe()
+        let stderrPipe = Pipe()
+        process.standardOutput = stdoutPipe
+        process.standardError = stderrPipe
+
+        try process.run()
+        process.waitUntilExit()
+
+        let stdoutData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
+        let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+        let stdout = String(data: stdoutData, encoding: .utf8) ?? ""
+        let stderr = String(data: stderrData, encoding: .utf8) ?? ""
+
+        guard process.terminationStatus == 0 else {
+            let detail = [stdout, stderr]
+                .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+                .joined(separator: "\n")
+            let command = ([executable] + arguments).joined(separator: " ")
+            let message = detail.isEmpty ? command : "\(command)\n\(detail)"
+            throw SceneRunnerError.commandFailed(message, process.terminationStatus)
+        }
+
+        return CommandResult(stdout: stdout, stderr: stderr)
+    }
+
     private func geometry(for step: SceneStep) -> WindowGeometry {
         let fallback = WindowGeometry(
             position: CGPoint(x: step.x ?? 40, y: step.y ?? 40),
@@ -374,6 +591,16 @@ private struct WindowGeometry {
     let size: CGSize
 }
 
+private struct IOSBuildArtifact {
+    let appPath: String
+    let bundleIdentifier: String?
+}
+
+private struct CommandResult {
+    let stdout: String
+    let stderr: String
+}
+
 enum SceneRunnerError: LocalizedError {
     case invalidStep(String)
     case appNotFound(String)
@@ -383,6 +610,10 @@ enum SceneRunnerError: LocalizedError {
     case windowNotFound(String)
     case windowEnumerationFailed
     case inputSynthesisFailed
+    case invalidSimulatorResponse
+    case simulatorDeviceNotFound(String)
+    case invalidBuildSettings
+    case buildArtifactNotFound
 
     var errorDescription: String? {
         switch self {
@@ -402,6 +633,14 @@ enum SceneRunnerError: LocalizedError {
             return "Could not read app windows through Accessibility."
         case .inputSynthesisFailed:
             return "Could not synthesize keyboard input."
+        case .invalidSimulatorResponse:
+            return "Could not read the iOS Simulator device list."
+        case let .simulatorDeviceNotFound(device):
+            return "Could not find an available iOS simulator named \(device)."
+        case .invalidBuildSettings:
+            return "Could not parse Xcode build settings for the iOS app."
+        case .buildArtifactNotFound:
+            return "Could not determine the built iOS app artifact."
         }
     }
 }
