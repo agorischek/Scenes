@@ -37,6 +37,18 @@ struct SceneOverlayView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .contentTransition(.interpolate)
             }
+
+            if runner.executionState == .running {
+                HStack {
+                    Spacer()
+
+                    Button("Cancel") {
+                        runner.cancelCurrentScene()
+                    }
+                    .buttonStyle(OverlayActionButtonStyle())
+                }
+                .padding(.top, 2)
+            }
         }
         .padding(14)
         .frame(width: 280, alignment: .leading)
@@ -127,5 +139,25 @@ private struct VisualEffectBlur: NSViewRepresentable {
         nsView.material = material
         nsView.blendingMode = blendingMode
         nsView.state = .active
+    }
+}
+
+private struct OverlayActionButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(.primary)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 4)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(Color.white.opacity(configuration.isPressed ? 0.16 : 0.10))
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.14), lineWidth: 1)
+            )
+            .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
+            .animation(.spring(duration: 0.18), value: configuration.isPressed)
     }
 }

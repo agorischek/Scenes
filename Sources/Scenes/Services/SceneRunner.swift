@@ -21,6 +21,7 @@ final class SceneRunner: ObservableObject {
     @Published private(set) var executionState: SceneExecutionState = .idle
     private var hasRequestedAccessibilityPrompt = false
     private var runToken = UUID()
+    private var activeTask: Task<Void, Never>?
 
     func run(scene: SceneDefinition) {
         guard !isRunning else { return }
@@ -35,7 +36,7 @@ final class SceneRunner: ObservableObject {
         currentStepLabel = totalSteps > 0 ? "Preparing scene" : "No steps"
         statusMessage = "Running \(scene.name)..."
 
-        Task {
+        activeTask = Task {
             do {
                 try await execute(scene: scene, runToken: runToken)
                 await MainActor.run {
@@ -45,11 +46,21 @@ final class SceneRunner: ObservableObject {
                     self.executionState = .succeeded
                     self.currentStepIndex = self.totalSteps
                     self.currentStepLabel = "Complete"
+                    self.activeTask = nil
                 }
                 try? await Task.sleep(for: .seconds(2))
                 await MainActor.run {
                     guard self.runToken == runToken, !self.isRunning, self.executionState == .succeeded else { return }
                     self.resetExecutionDetails()
+                }
+            } catch is CancellationError {
+                await MainActor.run {
+                    guard self.runToken == runToken else { return }
+                    self.statusMessage = "Canceled \(scene.name)"
+                    self.isRunning = false
+                    self.executionState = .failed
+                    self.currentStepLabel = "Canceled"
+                    self.activeTask = nil
                 }
             } catch {
                 await MainActor.run {
@@ -58,9 +69,15 @@ final class SceneRunner: ObservableObject {
                     self.isRunning = false
                     self.executionState = .failed
                     self.currentStepLabel = error.localizedDescription
+                    self.activeTask = nil
                 }
             }
         }
+    }
+
+    func cancelCurrentScene() {
+        guard isRunning else { return }
+        activeTask?.cancel()
     }
 
     func hasAccessibilityAccess() -> Bool {
@@ -90,6 +107,8 @@ final class SceneRunner: ObservableObject {
 
     private func execute(scene: SceneDefinition, runToken: UUID) async throws {
         for (index, step) in scene.steps.enumerated() {
+            try Task.checkCancellation()
+
             await MainActor.run {
                 guard self.runToken == runToken else { return }
                 self.currentStepIndex = index + 1

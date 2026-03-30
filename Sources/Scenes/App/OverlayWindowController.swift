@@ -21,7 +21,7 @@ final class OverlayWindowController {
         panel.isOpaque = false
         panel.hasShadow = true
         panel.hidesOnDeactivate = false
-        panel.ignoresMouseEvents = true
+        panel.ignoresMouseEvents = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
         panel.contentViewController = NSHostingController(
             rootView: SceneOverlayView()
