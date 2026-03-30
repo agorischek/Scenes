@@ -62,6 +62,7 @@ enum SceneStepType: String, Codable, Hashable, Sendable {
     case hideAllWindows
     case runTerminalCommand
     case runGhosttyCommand
+    case runGhosttyTabCommand
     case openURL
     case runShellCommand
     case delay

@@ -332,6 +332,10 @@ final class SceneRunner: ObservableObject {
             if !wasRunning {
                 storeCleanup(.terminateApp(bundleIdentifier: "com.mitchellh.ghostty"))
             }
+        case .runGhosttyTabCommand:
+            try await performBlockingStep {
+                try Self.runGhosttyTabCommand(step.command)
+            }
         case .openURL:
             let resolvedOpenURL = try resolvedOpenURL(for: step.url)
             let wasRunning = isAppRunning(bundleIdentifier: resolvedOpenURL.bundleIdentifier)
@@ -516,6 +520,31 @@ final class SceneRunner: ObservableObject {
         guard process.terminationStatus == 0 else {
             throw SceneRunnerError.commandFailed("open -na /Applications/Ghostty.app --args -e zsh -lc \(command)", process.terminationStatus)
         }
+    }
+
+    nonisolated private static func runGhosttyTabCommand(_ command: String?) throws {
+        guard let command, !command.isEmpty else {
+            throw SceneRunnerError.invalidStep("runGhosttyTabCommand requires command")
+        }
+
+        let escapedCommand = command
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+
+        let script = """
+        tell application "Ghostty" to activate
+        tell application "System Events"
+          keystroke "t" using command down
+          delay 0.4
+          keystroke "\(escapedCommand)"
+          key code 36
+        end tell
+        """
+
+        _ = try runCapturedCommand(
+            executable: "/usr/bin/osascript",
+            arguments: ["-e", script]
+        )
     }
 
     nonisolated private static func runShellCommand(_ command: String?) throws {
@@ -1026,6 +1055,8 @@ final class SceneRunner: ObservableObject {
             return "Running Terminal command"
         case .runGhosttyCommand:
             return "Running Ghostty command"
+        case .runGhosttyTabCommand:
+            return "Running Ghostty tab command"
         case .openURL:
             return "Opening \(step.url ?? "URL")"
         case .runShellCommand:
