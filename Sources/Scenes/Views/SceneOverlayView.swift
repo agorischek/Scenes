@@ -5,15 +5,26 @@ struct SceneOverlayView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 10) {
-                statusIndicator
+            HStack(alignment: .top, spacing: 10) {
+                HStack(spacing: 10) {
+                    statusIndicator
 
-                Text(titleText)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.primary)
-                    .contentTransition(.interpolate)
+                    Text(titleText)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.primary)
+                        .contentTransition(.interpolate)
+                }
 
                 Spacer()
+
+                Button {
+                    runner.dismissOverlay()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 9, weight: .bold))
+                        .frame(width: 18, height: 18)
+                }
+                .buttonStyle(OverlayCloseButtonStyle())
             }
 
             if let sceneName = runner.currentSceneName {
@@ -158,6 +169,23 @@ private struct OverlayActionButtonStyle: ButtonStyle {
                     .strokeBorder(Color.white.opacity(0.14), lineWidth: 1)
             )
             .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
+            .animation(.spring(duration: 0.18), value: configuration.isPressed)
+    }
+}
+
+private struct OverlayCloseButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(.secondary)
+            .background(
+                Circle()
+                    .fill(Color.white.opacity(configuration.isPressed ? 0.16 : 0.08))
+            )
+            .overlay(
+                Circle()
+                    .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
+            )
+            .scaleEffect(configuration.isPressed ? 0.94 : 1.0)
             .animation(.spring(duration: 0.18), value: configuration.isPressed)
     }
 }

@@ -19,6 +19,7 @@ final class SceneRunner: ObservableObject {
     @Published private(set) var currentStepIndex = 0
     @Published private(set) var totalSteps = 0
     @Published private(set) var executionState: SceneExecutionState = .idle
+    @Published private(set) var isOverlayDismissed = false
     private var hasRequestedAccessibilityPrompt = false
     private var runToken = UUID()
     private var activeTask: Task<Void, Never>?
@@ -30,6 +31,7 @@ final class SceneRunner: ObservableObject {
         self.runToken = runToken
         isRunning = true
         executionState = .running
+        isOverlayDismissed = false
         currentSceneName = scene.name
         totalSteps = scene.steps.count
         currentStepIndex = 0
@@ -78,6 +80,10 @@ final class SceneRunner: ObservableObject {
     func cancelCurrentScene() {
         guard isRunning else { return }
         activeTask?.cancel()
+    }
+
+    func dismissOverlay() {
+        isOverlayDismissed = true
     }
 
     func hasAccessibilityAccess() -> Bool {
@@ -697,6 +703,7 @@ final class SceneRunner: ObservableObject {
         currentStepIndex = 0
         totalSteps = 0
         executionState = .idle
+        isOverlayDismissed = false
         statusMessage = "Idle"
     }
 

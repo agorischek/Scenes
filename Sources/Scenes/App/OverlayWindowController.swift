@@ -6,6 +6,7 @@ import SwiftUI
 final class OverlayWindowController {
     private let panel: NSPanel
     private var cancellables = Set<AnyCancellable>()
+    private var hasPlacedPanel = false
 
     init(runner: SceneRunner) {
         panel = NSPanel(
@@ -22,6 +23,7 @@ final class OverlayWindowController {
         panel.hasShadow = true
         panel.hidesOnDeactivate = false
         panel.ignoresMouseEvents = false
+        panel.isMovableByWindowBackground = true
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
         panel.contentViewController = NSHostingController(
             rootView: SceneOverlayView()
@@ -38,11 +40,20 @@ final class OverlayWindowController {
     }
 
     private func refresh(using runner: SceneRunner) {
+        if runner.isOverlayDismissed {
+            panel.orderOut(nil)
+            return
+        }
+
         switch runner.executionState {
         case .idle:
             panel.orderOut(nil)
+            hasPlacedPanel = false
         case .running, .succeeded, .failed:
-            positionPanel()
+            if hasPlacedPanel == false || panel.isVisible == false {
+                positionPanel()
+                hasPlacedPanel = true
+            }
             panel.orderFrontRegardless()
         }
     }
