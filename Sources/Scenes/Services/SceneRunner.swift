@@ -586,9 +586,10 @@ final class SceneRunner: ObservableObject {
                     destination: destination,
                     buildSettingOverrides: buildSettingOverrides
                 )
-
-                try persistIOSLaunchConfiguration(launchConfiguration, for: artifact)
             }
+
+            try applyIOSLaunchConfiguration(launchConfiguration, to: artifact)
+            try persistIOSLaunchConfiguration(launchConfiguration, for: artifact)
 
             appPath = artifact.appPath
             if bundleIdentifier == nil {
@@ -1228,6 +1229,66 @@ final class SceneRunner: ObservableObject {
 
         let data = try JSONEncoder().encode(configuration)
         try data.write(to: iosLaunchConfigurationURL(for: artifact), options: .atomic)
+    }
+
+    nonisolated private static func applyIOSLaunchConfiguration(_ configuration: IOSLaunchConfiguration, to artifact: IOSBuildArtifact) throws {
+        guard configuration.requiresConfigValidation else {
+            return
+        }
+
+        let plistURL = URL(fileURLWithPath: artifact.appPath).appendingPathComponent("Info.plist")
+        guard FileManager.default.fileExists(atPath: plistURL.path) else {
+            throw SceneRunnerError.invalidBuildSettings
+        }
+
+        func plistBuddy(_ command: String) throws {
+            _ = try runCapturedCommand(
+                executable: "/usr/libexec/PlistBuddy",
+                arguments: ["-c", command, plistURL.path]
+            )
+        }
+
+        func addOrSetString(key: String, value: String) throws {
+            do {
+                try plistBuddy("Set :\(key) \(value)")
+            } catch {
+                try plistBuddy("Add :\(key) string \(value)")
+            }
+        }
+
+        func addOrSetBool(key: String, value: Bool) throws {
+            let plistValue = value ? "true" : "false"
+            do {
+                try plistBuddy("Set :\(key) \(plistValue)")
+            } catch {
+                try plistBuddy("Add :\(key) bool \(plistValue)")
+            }
+        }
+
+        func deleteKeyIfPresent(_ key: String) {
+            try? plistBuddy("Delete :\(key)")
+        }
+
+        if let studioURL = configuration.studioURL {
+            try addOrSetString(key: "WORKSTREAMSStudioURL", value: studioURL)
+        } else {
+            deleteKeyIfPresent("WORKSTREAMSStudioURL")
+        }
+
+        switch configuration.authMode {
+        case .disabled:
+            try addOrSetBool(key: "WORKSTREAMSDisableAuth", value: true)
+            if let disabledAuthUserId = configuration.disabledAuthUserId {
+                try addOrSetString(key: "WORKSTREAMSDisabledAuthUserId", value: disabledAuthUserId)
+            }
+        case .enabled:
+            try addOrSetBool(key: "WORKSTREAMSDisableAuth", value: false)
+            deleteKeyIfPresent("WORKSTREAMSDisabledAuthUserId")
+        case nil:
+            if configuration.disabledAuthUserId == nil {
+                deleteKeyIfPresent("WORKSTREAMSDisabledAuthUserId")
+            }
+        }
     }
 
     nonisolated private static func loadPersistedIOSLaunchConfiguration(for artifact: IOSBuildArtifact) -> IOSLaunchConfiguration? {
