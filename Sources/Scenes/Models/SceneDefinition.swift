@@ -20,6 +20,7 @@ struct SceneStep: Codable, Hashable {
     let command: String?
     let arguments: [String]?
     let buildStrategy: IOSBuildStrategy?
+    let buildSettingOverrides: [String]?
     let url: String?
     let text: String?
     let key: String?
@@ -31,6 +32,9 @@ struct SceneStep: Codable, Hashable {
     let configuration: String?
     let appPath: String?
     let showSimulator: Bool?
+    let studioURL: String?
+    let authMode: IOSAuthMode?
+    let disabledAuthUserId: String?
     let x: Double?
     let y: Double?
     let width: Double?
@@ -44,6 +48,11 @@ struct SceneStep: Codable, Hashable {
 enum IOSBuildStrategy: String, Codable, Hashable {
     case alwaysBuild
     case useExistingBuildIfPresent
+}
+
+enum IOSAuthMode: String, Codable, Hashable {
+    case enabled
+    case disabled
 }
 
 enum SceneStepType: String, Codable, Hashable {

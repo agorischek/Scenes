@@ -228,6 +228,8 @@ final class SceneRunner: ObservableObject {
         let deviceName = step.device ?? "iPhone 17"
         let showSimulator = step.showSimulator ?? true
         let buildStrategy = step.buildStrategy ?? .alwaysBuild
+        let buildSettingOverrides = try iosBuildSettingOverrides(for: step)
+        let launchConfiguration = try iosLaunchConfiguration(for: step)
 
         if showSimulator {
             let openProcess = Process()
@@ -252,7 +254,8 @@ final class SceneRunner: ObservableObject {
                 projectPath: projectPath,
                 scheme: scheme,
                 configuration: configuration,
-                destination: destination
+                destination: destination,
+                buildSettingOverrides: buildSettingOverrides
             )
 
             let shouldBuild: Bool
@@ -260,7 +263,11 @@ final class SceneRunner: ObservableObject {
             case .alwaysBuild:
                 shouldBuild = true
             case .useExistingBuildIfPresent:
-                shouldBuild = !FileManager.default.fileExists(atPath: artifact.appPath)
+                shouldBuild = shouldBuildIOSArtifact(
+                    artifact: artifact,
+                    launchConfiguration: launchConfiguration,
+                    buildSettingOverrides: buildSettingOverrides
+                )
             }
 
             if shouldBuild {
@@ -268,15 +275,19 @@ final class SceneRunner: ObservableObject {
                     projectPath: projectPath,
                     scheme: scheme,
                     configuration: configuration,
-                    destination: destination
+                    destination: destination,
+                    buildSettingOverrides: buildSettingOverrides
                 )
 
                 artifact = try resolveIOSBuildArtifact(
                     projectPath: projectPath,
                     scheme: scheme,
                     configuration: configuration,
-                    destination: destination
+                    destination: destination,
+                    buildSettingOverrides: buildSettingOverrides
                 )
+
+                try persistIOSLaunchConfiguration(launchConfiguration, for: artifact)
             }
 
             appPath = artifact.appPath
@@ -309,7 +320,10 @@ final class SceneRunner: ObservableObject {
 
         _ = try runCapturedCommand(
             executable: "/usr/bin/xcrun",
-            arguments: ["simctl", "launch", udid, bundleIdentifier] + (step.arguments ?? [])
+            arguments: ["simctl", "launch", udid, bundleIdentifier]
+                + launchConfiguration.arguments
+                + (step.arguments ?? []),
+            environment: launchConfiguration.environment
         )
     }
 
@@ -517,7 +531,13 @@ final class SceneRunner: ObservableObject {
         )
     }
 
-    private func buildIOSProject(projectPath: String, scheme: String, configuration: String, destination: String) throws {
+    private func buildIOSProject(
+        projectPath: String,
+        scheme: String,
+        configuration: String,
+        destination: String,
+        buildSettingOverrides: [String]
+    ) throws {
         _ = try runCapturedCommand(
             executable: "/usr/bin/xcodebuild",
             arguments: [
@@ -526,12 +546,18 @@ final class SceneRunner: ObservableObject {
                 "-configuration", configuration,
                 "-destination", destination,
                 "build",
-            ],
+            ] + buildSettingOverrides,
             currentDirectoryPath: URL(fileURLWithPath: projectPath).deletingLastPathComponent().path
         )
     }
 
-    private func resolveIOSBuildArtifact(projectPath: String, scheme: String, configuration: String, destination: String) throws -> IOSBuildArtifact {
+    private func resolveIOSBuildArtifact(
+        projectPath: String,
+        scheme: String,
+        configuration: String,
+        destination: String,
+        buildSettingOverrides: [String]
+    ) throws -> IOSBuildArtifact {
         let result = try runCapturedCommand(
             executable: "/usr/bin/xcodebuild",
             arguments: [
@@ -541,7 +567,7 @@ final class SceneRunner: ObservableObject {
                 "-destination", destination,
                 "-showBuildSettings",
                 "-json",
-            ],
+            ] + buildSettingOverrides,
             currentDirectoryPath: URL(fileURLWithPath: projectPath).deletingLastPathComponent().path
         )
 
@@ -574,13 +600,17 @@ final class SceneRunner: ObservableObject {
     private func runCapturedCommand(
         executable: String,
         arguments: [String],
-        currentDirectoryPath: String? = nil
+        currentDirectoryPath: String? = nil,
+        environment: [String: String]? = nil
     ) throws -> CommandResult {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executable)
         process.arguments = arguments
         if let currentDirectoryPath {
             process.currentDirectoryURL = URL(fileURLWithPath: currentDirectoryPath)
+        }
+        if let environment {
+            process.environment = ProcessInfo.processInfo.environment.merging(environment) { _, new in new }
         }
 
         let stdoutPipe = Pipe()
@@ -684,6 +714,176 @@ final class SceneRunner: ObservableObject {
             )
         )
     }
+
+    private func iosBuildSettingOverrides(for step: SceneStep) throws -> [String] {
+        var overrides = step.buildSettingOverrides ?? []
+
+        if let studioURL = normalizedString(step.studioURL) {
+            overrides.append("INFOPLIST_KEY_WORKSTREAMSStudioURL=\(studioURL)")
+        }
+
+        switch step.authMode {
+        case .disabled:
+            guard let disabledAuthUserId = normalizedString(step.disabledAuthUserId) else {
+                throw SceneRunnerError.invalidStep("disabledAuthUserId is required when iOS auth is disabled")
+            }
+            overrides.append("INFOPLIST_KEY_WORKSTREAMSDisableAuth=YES")
+            overrides.append("INFOPLIST_KEY_WORKSTREAMSDisabledAuthUserId=\(disabledAuthUserId)")
+        case .enabled:
+            overrides.append("INFOPLIST_KEY_WORKSTREAMSDisableAuth=NO")
+        case nil:
+            break
+        }
+
+        return overrides
+    }
+
+    private func iosLaunchConfiguration(for step: SceneStep) throws -> IOSLaunchConfiguration {
+        var environment: [String: String] = [:]
+        var arguments: [String] = []
+
+        if let studioURL = normalizedString(step.studioURL) {
+            environment["SIMCTL_CHILD_WORKSTREAMS_STUDIO_URL"] = studioURL
+            arguments.append(contentsOf: ["--workstreams-studio-url", studioURL])
+        }
+
+        switch step.authMode {
+        case .disabled:
+            guard let disabledAuthUserId = normalizedString(step.disabledAuthUserId) else {
+                throw SceneRunnerError.invalidStep("disabledAuthUserId is required when iOS auth is disabled")
+            }
+            environment["SIMCTL_CHILD_DANGEROUSLY_DISABLE_AUTH"] = "1"
+            environment["SIMCTL_CHILD_DISABLED_AUTH_USER_ID"] = disabledAuthUserId
+            arguments.append("--dangerously-disable-auth")
+            arguments.append(contentsOf: ["--disabled-auth-user-id", disabledAuthUserId])
+        case .enabled:
+            environment["SIMCTL_CHILD_DANGEROUSLY_DISABLE_AUTH"] = "0"
+        case nil:
+            break
+        }
+
+        return IOSLaunchConfiguration(environment: environment, arguments: arguments)
+    }
+
+    private func shouldBuildIOSArtifact(
+        artifact: IOSBuildArtifact,
+        launchConfiguration: IOSLaunchConfiguration,
+        buildSettingOverrides: [String]
+    ) -> Bool {
+        guard FileManager.default.fileExists(atPath: artifact.appPath) else {
+            return true
+        }
+
+        let managedBuildSettingOverrides = Set(iosBuildSettingOverrideKeys)
+        let hasUnmanagedBuildSettingOverrides = buildSettingOverrides.contains { override in
+            guard let key = override.split(separator: "=", maxSplits: 1).first else {
+                return true
+            }
+            return managedBuildSettingOverrides.contains(String(key)) == false
+        }
+
+        if hasUnmanagedBuildSettingOverrides {
+            return true
+        }
+
+        guard launchConfiguration.requiresConfigValidation else {
+            return false
+        }
+
+        if let persistedConfiguration = loadPersistedIOSLaunchConfiguration(for: artifact) {
+            return persistedConfiguration != launchConfiguration
+        }
+
+        guard let infoDictionary = NSDictionary(contentsOf: URL(fileURLWithPath: artifact.appPath).appendingPathComponent("Info.plist")) as? [String: Any] else {
+            return true
+        }
+
+        if let expectedStudioURL = launchConfiguration.studioURL {
+            let actualStudioURL = normalizedString(infoDictionary["WORKSTREAMSStudioURL"])
+            if actualStudioURL != expectedStudioURL {
+                return true
+            }
+        }
+
+        switch launchConfiguration.authMode {
+        case .disabled:
+            let actualDisableAuth = normalizedBooleanString(infoDictionary["WORKSTREAMSDisableAuth"])
+            if actualDisableAuth != "yes" {
+                return true
+            }
+
+            let actualDisabledAuthUserId = normalizedString(infoDictionary["WORKSTREAMSDisabledAuthUserId"])
+            if actualDisabledAuthUserId != launchConfiguration.disabledAuthUserId {
+                return true
+            }
+        case .enabled:
+            let actualDisableAuth = normalizedBooleanString(infoDictionary["WORKSTREAMSDisableAuth"])
+            if actualDisableAuth != "no" {
+                return true
+            }
+        case nil:
+            break
+        }
+
+        return false
+    }
+
+    private func normalizedString(_ value: Any?) -> String? {
+        switch value {
+        case let value as String:
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : trimmed
+        case let value as NSNumber:
+            return value.stringValue
+        default:
+            return nil
+        }
+    }
+
+    private func normalizedBooleanString(_ value: Any?) -> String? {
+        guard let normalized = normalizedString(value)?.lowercased() else {
+            return nil
+        }
+
+        switch normalized {
+        case "1", "true", "yes", "on":
+            return "yes"
+        case "0", "false", "no", "off":
+            return "no"
+        default:
+            return normalized
+        }
+    }
+
+    private func persistIOSLaunchConfiguration(_ configuration: IOSLaunchConfiguration, for artifact: IOSBuildArtifact) throws {
+        guard configuration.requiresConfigValidation else {
+            return
+        }
+
+        let data = try JSONEncoder().encode(configuration)
+        try data.write(to: iosLaunchConfigurationURL(for: artifact), options: .atomic)
+    }
+
+    private func loadPersistedIOSLaunchConfiguration(for artifact: IOSBuildArtifact) -> IOSLaunchConfiguration? {
+        let url = iosLaunchConfigurationURL(for: artifact)
+        guard let data = try? Data(contentsOf: url) else {
+            return nil
+        }
+
+        return try? JSONDecoder().decode(IOSLaunchConfiguration.self, from: data)
+    }
+
+    private func iosLaunchConfigurationURL(for artifact: IOSBuildArtifact) -> URL {
+        URL(fileURLWithPath: artifact.appPath + ".scenes-launch-config.json")
+    }
+
+    private var iosBuildSettingOverrideKeys: [String] {
+        [
+            "INFOPLIST_KEY_WORKSTREAMSStudioURL",
+            "INFOPLIST_KEY_WORKSTREAMSDisableAuth",
+            "INFOPLIST_KEY_WORKSTREAMSDisabledAuthUserId",
+        ]
+    }
 }
 
 private struct WindowGeometry {
@@ -694,6 +894,31 @@ private struct WindowGeometry {
 private struct IOSBuildArtifact {
     let appPath: String
     let bundleIdentifier: String?
+}
+
+private struct IOSLaunchConfiguration: Codable, Equatable {
+    let environment: [String: String]
+    let arguments: [String]
+    let studioURL: String?
+    let authMode: IOSAuthMode?
+    let disabledAuthUserId: String?
+
+    init(environment: [String: String], arguments: [String]) {
+        self.environment = environment
+        self.arguments = arguments
+        self.studioURL = environment["SIMCTL_CHILD_WORKSTREAMS_STUDIO_URL"]
+        self.authMode = {
+            guard let value = environment["SIMCTL_CHILD_DANGEROUSLY_DISABLE_AUTH"] else {
+                return nil
+            }
+            return value == "1" ? .disabled : .enabled
+        }()
+        self.disabledAuthUserId = environment["SIMCTL_CHILD_DISABLED_AUTH_USER_ID"]
+    }
+
+    var requiresConfigValidation: Bool {
+        studioURL != nil || authMode != nil || disabledAuthUserId != nil
+    }
 }
 
 private struct CommandResult {
