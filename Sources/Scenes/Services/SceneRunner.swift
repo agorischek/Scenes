@@ -274,7 +274,21 @@ final class SceneRunner: ObservableObject {
                 self.statusMessage = "Step \(index + 1) of \(scene.steps.count): \(self.currentStepLabel ?? "")"
             }
 
-            try await execute(step: step)
+            do {
+                try await execute(step: step)
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                guard step.shouldContinueOnError else {
+                    throw error
+                }
+
+                await MainActor.run {
+                    guard self.runToken == runToken else { return }
+                    self.statusMessage = "Warning: \(error.localizedDescription)"
+                    self.currentStepLabel = "Skipped after error: \(self.description(for: step))"
+                }
+            }
         }
     }
 

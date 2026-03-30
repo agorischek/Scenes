@@ -15,6 +15,7 @@ struct SceneDefinition: Identifiable, Codable, Hashable, Sendable {
 
 struct SceneStep: Codable, Hashable, Sendable {
     let type: SceneStepType
+    let continueOnError: Bool?
     let applicationName: String?
     let bundleIdentifier: String?
     let command: String?
@@ -43,6 +44,10 @@ struct SceneStep: Codable, Hashable, Sendable {
     let yFraction: Double?
     let widthFraction: Double?
     let heightFraction: Double?
+
+    var shouldContinueOnError: Bool {
+        continueOnError ?? true
+    }
 }
 
 enum IOSBuildStrategy: String, Codable, Hashable, Sendable {
