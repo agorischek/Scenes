@@ -1,0 +1,22 @@
+{
+  "name": "Verify iOS Disabled Auth",
+  "steps": [
+    {
+      "type": "bootIOSSimulator",
+      "device": "iPhone 17 Pro",
+      "showSimulator": true
+    },
+    {
+      "type": "launchIOSSimulatorApp",
+      "projectPath": "/Users/umeboshi/Git/workstreams.facility/product/packages/app-ios/acp-remote.xcodeproj",
+      "scheme": "acp-remote",
+      "device": "iPhone 17 Pro",
+      "configuration": "Debug",
+      "buildStrategy": "alwaysBuild",
+      "studioURL": "http://localhost:3310",
+      "authMode": "disabled",
+      "disabledAuthUserId": "workstreams-facility-web-dev",
+      "showSimulator": false
+    }
+  ]
+}

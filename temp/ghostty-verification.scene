@@ -1,0 +1,17 @@
+{
+  "name": "Ghostty Verification",
+  "steps": [
+    {
+      "type": "runShellCommand",
+      "command": "pkill -x ghostty || true"
+    },
+    {
+      "type": "delay",
+      "seconds": 1.0
+    },
+    {
+      "type": "runGhosttyCommand",
+      "command": "echo GHOSTTY_VERIFIED > /tmp/scenes-ghostty-verified.txt"
+    }
+  ]
+}

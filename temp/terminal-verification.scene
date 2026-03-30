@@ -1,0 +1,17 @@
+{
+  "name": "Terminal Verification",
+  "steps": [
+    {
+      "type": "runShellCommand",
+      "command": "pkill -x Terminal || true"
+    },
+    {
+      "type": "delay",
+      "seconds": 1.0
+    },
+    {
+      "type": "runTerminalCommand",
+      "command": "echo TERMINAL_VERIFIED > /tmp/scenes-terminal-verified.txt"
+    }
+  ]
+}

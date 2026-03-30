@@ -1,0 +1,17 @@
+{
+  "name": "Terminal Verification C07FDD59-4841-4BE4-A56A-FC4EC69CF09E",
+  "steps": [
+    {
+      "type": "runShellCommand",
+      "command": "pkill -x Terminal || true"
+    },
+    {
+      "type": "delay",
+      "seconds": 1.0
+    },
+    {
+      "type": "runTerminalCommand",
+      "command": "echo TERMINAL_VERIFIED > /tmp/scenes-terminal-verified-C07FDD59-4841-4BE4-A56A-FC4EC69CF09E.txt"
+    }
+  ]
+}

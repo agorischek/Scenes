@@ -1,0 +1,9 @@
+{
+  "name": "Cancel Verification",
+  "steps": [
+    {
+      "type": "runShellCommand",
+      "command": "rm -f /tmp/scenes-cancel-verified.txt && sleep 20 && touch /tmp/scenes-cancel-verified.txt"
+    }
+  ]
+}

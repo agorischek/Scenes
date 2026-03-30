@@ -1,0 +1,9 @@
+{
+  "name": "Open Path Verification",
+  "steps": [
+    {
+      "type": "runShellCommand",
+      "command": "echo OPEN_PATH_VERIFIED > /tmp/scenes-open-path-verified.txt"
+    }
+  ]
+}
