@@ -1,6 +1,6 @@
 import Foundation
 
-struct SceneDefinition: Identifiable, Codable, Hashable {
+struct SceneDefinition: Identifiable, Codable, Hashable, Sendable {
     var id: String { url?.path ?? name }
 
     let name: String
@@ -13,7 +13,7 @@ struct SceneDefinition: Identifiable, Codable, Hashable {
     }
 }
 
-struct SceneStep: Codable, Hashable {
+struct SceneStep: Codable, Hashable, Sendable {
     let type: SceneStepType
     let applicationName: String?
     let bundleIdentifier: String?
@@ -45,17 +45,17 @@ struct SceneStep: Codable, Hashable {
     let heightFraction: Double?
 }
 
-enum IOSBuildStrategy: String, Codable, Hashable {
+enum IOSBuildStrategy: String, Codable, Hashable, Sendable {
     case alwaysBuild
     case useExistingBuildIfPresent
 }
 
-enum IOSAuthMode: String, Codable, Hashable {
+enum IOSAuthMode: String, Codable, Hashable, Sendable {
     case enabled
     case disabled
 }
 
-enum SceneStepType: String, Codable, Hashable {
+enum SceneStepType: String, Codable, Hashable, Sendable {
     case launchApp
     case launchIOSSimulatorApp
     case runTerminalCommand

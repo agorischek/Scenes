@@ -131,15 +131,23 @@ final class SceneRunner: ObservableObject {
         case .launchApp:
             try launchApp(named: step.applicationName, bundleIdentifier: step.bundleIdentifier)
         case .launchIOSSimulatorApp:
-            try launchIOSSimulatorApp(step: step)
+            try await performBlockingStep {
+                try Self.launchIOSSimulatorApp(step: step)
+            }
         case .runTerminalCommand:
-            try runTerminalCommand(step.command)
+            try await performBlockingStep {
+                try Self.runTerminalCommand(step.command)
+            }
         case .runGhosttyCommand:
-            try runGhosttyCommand(step.command)
+            try await performBlockingStep {
+                try Self.runGhosttyCommand(step.command)
+            }
         case .openURL:
             try openURL(step.url)
         case .runShellCommand:
-            try runShellCommand(step.command)
+            try await performBlockingStep {
+                try Self.runShellCommand(step.command)
+            }
         case .delay:
             try await delay(seconds: step.seconds)
         case .moveWindow:
@@ -150,6 +158,18 @@ final class SceneRunner: ObservableObject {
             try await typeText(step: step)
         case .pressKey:
             try await pressKey(step: step)
+        }
+    }
+
+    private func performBlockingStep<T: Sendable>(_ work: @escaping @Sendable () throws -> T) async throws -> T {
+        try await withCheckedThrowingContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                do {
+                    continuation.resume(returning: try work())
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
         }
     }
 
@@ -184,7 +204,7 @@ final class SceneRunner: ObservableObject {
         NSWorkspace.shared.open(url)
     }
 
-    private func runTerminalCommand(_ command: String?) throws {
+    nonisolated private static func runTerminalCommand(_ command: String?) throws {
         guard let command, !command.isEmpty else {
             throw SceneRunnerError.invalidStep("runTerminalCommand requires command")
         }
@@ -216,7 +236,7 @@ final class SceneRunner: ObservableObject {
         }
     }
 
-    private func runGhosttyCommand(_ command: String?) throws {
+    nonisolated private static func runGhosttyCommand(_ command: String?) throws {
         guard let command, !command.isEmpty else {
             throw SceneRunnerError.invalidStep("runGhosttyCommand requires command")
         }
@@ -232,7 +252,7 @@ final class SceneRunner: ObservableObject {
         }
     }
 
-    private func runShellCommand(_ command: String?) throws {
+    nonisolated private static func runShellCommand(_ command: String?) throws {
         guard let command, !command.isEmpty else {
             throw SceneRunnerError.invalidStep("runShellCommand requires command")
         }
@@ -249,7 +269,7 @@ final class SceneRunner: ObservableObject {
         }
     }
 
-    private func launchIOSSimulatorApp(step: SceneStep) throws {
+    nonisolated private static func launchIOSSimulatorApp(step: SceneStep) throws {
         let deviceName = step.device ?? "iPhone 17"
         let showSimulator = step.showSimulator ?? true
         let buildStrategy = step.buildStrategy ?? .alwaysBuild
@@ -503,7 +523,7 @@ final class SceneRunner: ObservableObject {
         try await Task.sleep(for: .milliseconds(100))
     }
 
-    private func resolveSimulatorUDID(named deviceName: String) throws -> String {
+    nonisolated private static func resolveSimulatorUDID(named deviceName: String) throws -> String {
         let result = try runCapturedCommand(
             executable: "/usr/bin/xcrun",
             arguments: ["simctl", "list", "devices", "available", "--json"]
@@ -533,7 +553,7 @@ final class SceneRunner: ObservableObject {
         throw SceneRunnerError.simulatorDeviceNotFound(deviceName)
     }
 
-    private func bootSimulator(udid: String) throws {
+    nonisolated private static func bootSimulator(udid: String) throws {
         do {
             _ = try runCapturedCommand(
                 executable: "/usr/bin/xcrun",
@@ -556,7 +576,7 @@ final class SceneRunner: ObservableObject {
         )
     }
 
-    private func buildIOSProject(
+    nonisolated private static func buildIOSProject(
         projectPath: String,
         scheme: String,
         configuration: String,
@@ -576,7 +596,7 @@ final class SceneRunner: ObservableObject {
         )
     }
 
-    private func resolveIOSBuildArtifact(
+    nonisolated private static func resolveIOSBuildArtifact(
         projectPath: String,
         scheme: String,
         configuration: String,
@@ -622,7 +642,7 @@ final class SceneRunner: ObservableObject {
         throw SceneRunnerError.buildArtifactNotFound
     }
 
-    private func runCapturedCommand(
+    nonisolated private static func runCapturedCommand(
         executable: String,
         arguments: [String],
         currentDirectoryPath: String? = nil,
@@ -741,7 +761,7 @@ final class SceneRunner: ObservableObject {
         )
     }
 
-    private func iosBuildSettingOverrides(for step: SceneStep) throws -> [String] {
+    nonisolated private static func iosBuildSettingOverrides(for step: SceneStep) throws -> [String] {
         var overrides = step.buildSettingOverrides ?? []
 
         if let studioURL = normalizedString(step.studioURL) {
@@ -764,7 +784,7 @@ final class SceneRunner: ObservableObject {
         return overrides
     }
 
-    private func iosLaunchConfiguration(for step: SceneStep) throws -> IOSLaunchConfiguration {
+    nonisolated private static func iosLaunchConfiguration(for step: SceneStep) throws -> IOSLaunchConfiguration {
         var environment: [String: String] = [:]
         var arguments: [String] = []
 
@@ -791,7 +811,7 @@ final class SceneRunner: ObservableObject {
         return IOSLaunchConfiguration(environment: environment, arguments: arguments)
     }
 
-    private func shouldBuildIOSArtifact(
+    nonisolated private static func shouldBuildIOSArtifact(
         artifact: IOSBuildArtifact,
         launchConfiguration: IOSLaunchConfiguration,
         buildSettingOverrides: [String]
@@ -854,7 +874,7 @@ final class SceneRunner: ObservableObject {
         return false
     }
 
-    private func normalizedString(_ value: Any?) -> String? {
+    nonisolated private static func normalizedString(_ value: Any?) -> String? {
         switch value {
         case let value as String:
             let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -866,7 +886,7 @@ final class SceneRunner: ObservableObject {
         }
     }
 
-    private func normalizedBooleanString(_ value: Any?) -> String? {
+    nonisolated private static func normalizedBooleanString(_ value: Any?) -> String? {
         guard let normalized = normalizedString(value)?.lowercased() else {
             return nil
         }
@@ -881,7 +901,7 @@ final class SceneRunner: ObservableObject {
         }
     }
 
-    private func persistIOSLaunchConfiguration(_ configuration: IOSLaunchConfiguration, for artifact: IOSBuildArtifact) throws {
+    nonisolated private static func persistIOSLaunchConfiguration(_ configuration: IOSLaunchConfiguration, for artifact: IOSBuildArtifact) throws {
         guard configuration.requiresConfigValidation else {
             return
         }
@@ -890,7 +910,7 @@ final class SceneRunner: ObservableObject {
         try data.write(to: iosLaunchConfigurationURL(for: artifact), options: .atomic)
     }
 
-    private func loadPersistedIOSLaunchConfiguration(for artifact: IOSBuildArtifact) -> IOSLaunchConfiguration? {
+    nonisolated private static func loadPersistedIOSLaunchConfiguration(for artifact: IOSBuildArtifact) -> IOSLaunchConfiguration? {
         let url = iosLaunchConfigurationURL(for: artifact)
         guard let data = try? Data(contentsOf: url) else {
             return nil
@@ -899,11 +919,11 @@ final class SceneRunner: ObservableObject {
         return try? JSONDecoder().decode(IOSLaunchConfiguration.self, from: data)
     }
 
-    private func iosLaunchConfigurationURL(for artifact: IOSBuildArtifact) -> URL {
+    nonisolated private static func iosLaunchConfigurationURL(for artifact: IOSBuildArtifact) -> URL {
         URL(fileURLWithPath: artifact.appPath + ".scenes-launch-config.json")
     }
 
-    private var iosBuildSettingOverrideKeys: [String] {
+    nonisolated private static var iosBuildSettingOverrideKeys: [String] {
         [
             "INFOPLIST_KEY_WORKSTREAMSStudioURL",
             "INFOPLIST_KEY_WORKSTREAMSDisableAuth",
