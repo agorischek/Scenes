@@ -20,7 +20,7 @@ final class OverlayWindowController {
         panel.level = .statusBar
         panel.backgroundColor = .clear
         panel.isOpaque = false
-        panel.hasShadow = true
+        panel.hasShadow = false
         panel.hidesOnDeactivate = false
         panel.ignoresMouseEvents = false
         panel.isMovableByWindowBackground = true
@@ -29,6 +29,9 @@ final class OverlayWindowController {
             rootView: SceneOverlayView()
                 .environmentObject(runner)
         )
+        panel.contentView?.wantsLayer = true
+        panel.contentView?.layer?.cornerRadius = 14
+        panel.contentView?.layer?.masksToBounds = true
         panel.orderOut(nil)
 
         runner.objectWillChange

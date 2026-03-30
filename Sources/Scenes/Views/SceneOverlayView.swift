@@ -75,6 +75,7 @@ struct SceneOverlayView: View {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .strokeBorder(Color.white.opacity(0.16), lineWidth: 1)
         )
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .shadow(color: .black.opacity(0.18), radius: 20, y: 12)
         .animation(.spring(duration: 0.32), value: runner.executionState)
         .animation(.spring(duration: 0.32), value: runner.currentSceneName)
