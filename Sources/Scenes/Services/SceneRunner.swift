@@ -20,15 +20,21 @@ final class SceneRunner: ObservableObject {
     @Published private(set) var totalSteps = 0
     @Published private(set) var executionState: SceneExecutionState = .idle
     @Published private(set) var isOverlayDismissed = false
+    @Published private(set) var canTeardown = false
     private var hasRequestedAccessibilityPrompt = false
     private var runToken = UUID()
     private var activeTask: Task<Void, Never>?
+    private var cleanupActions: [SceneCleanupAction] = []
+    private var lastSceneName: String?
 
     func run(scene: SceneDefinition) {
         guard !isRunning else { return }
 
         let runToken = UUID()
         self.runToken = runToken
+        cleanupActions = []
+        canTeardown = false
+        lastSceneName = scene.name
         isRunning = true
         executionState = .running
         isOverlayDismissed = false
@@ -82,6 +88,78 @@ final class SceneRunner: ObservableObject {
         activeTask?.cancel()
     }
 
+    func teardownLastScene() {
+        guard !isRunning else { return }
+        guard !cleanupActions.isEmpty else {
+            statusMessage = "Nothing to tear down"
+            return
+        }
+
+        let runToken = UUID()
+        self.runToken = runToken
+        let actions = cleanupActions.reversed()
+        cleanupActions = []
+        canTeardown = false
+        isRunning = true
+        executionState = .running
+        isOverlayDismissed = false
+        currentSceneName = lastSceneName.map { "\($0) Teardown" } ?? "Scene Teardown"
+        currentStepIndex = 0
+        totalSteps = actions.count
+        currentStepLabel = actions.isEmpty ? "Nothing to tear down" : "Preparing teardown"
+        statusMessage = "Tearing down scene..."
+
+        activeTask = Task {
+            do {
+                for (index, action) in actions.enumerated() {
+                    try Task.checkCancellation()
+
+                    await MainActor.run {
+                        guard self.runToken == runToken else { return }
+                        self.currentStepIndex = index + 1
+                        self.currentStepLabel = self.description(for: action)
+                        self.statusMessage = "Teardown step \(index + 1) of \(actions.count): \(self.currentStepLabel ?? "")"
+                    }
+
+                    try await performCleanup(action)
+                }
+
+                await MainActor.run {
+                    guard self.runToken == runToken else { return }
+                    self.statusMessage = "Teardown complete"
+                    self.isRunning = false
+                    self.executionState = .succeeded
+                    self.currentStepIndex = self.totalSteps
+                    self.currentStepLabel = "Complete"
+                    self.activeTask = nil
+                }
+                try? await Task.sleep(for: .seconds(2))
+                await MainActor.run {
+                    guard self.runToken == runToken, !self.isRunning, self.executionState == .succeeded else { return }
+                    self.resetExecutionDetails()
+                }
+            } catch is CancellationError {
+                await MainActor.run {
+                    guard self.runToken == runToken else { return }
+                    self.statusMessage = "Teardown canceled"
+                    self.isRunning = false
+                    self.executionState = .failed
+                    self.currentStepLabel = "Canceled"
+                    self.activeTask = nil
+                }
+            } catch {
+                await MainActor.run {
+                    guard self.runToken == runToken else { return }
+                    self.statusMessage = "Teardown failed: \(error.localizedDescription)"
+                    self.isRunning = false
+                    self.executionState = .failed
+                    self.currentStepLabel = error.localizedDescription
+                    self.activeTask = nil
+                }
+            }
+        }
+    }
+
     func dismissOverlay() {
         isOverlayDismissed = true
     }
@@ -129,24 +207,57 @@ final class SceneRunner: ObservableObject {
     private func execute(step: SceneStep) async throws {
         switch step.type {
         case .launchApp:
-            try launchApp(named: step.applicationName, bundleIdentifier: step.bundleIdentifier)
+            let resolvedApp = try resolveApplication(named: step.applicationName, bundleIdentifier: step.bundleIdentifier)
+            let wasRunning = isAppRunning(bundleIdentifier: resolvedApp.bundleIdentifier)
+            try launchApp(resolvedApp)
+            if !wasRunning {
+                storeCleanup(.terminateApp(bundleIdentifier: resolvedApp.bundleIdentifier))
+            }
         case .launchIOSSimulatorApp:
-            try await performBlockingStep {
+            let simulatorWasRunning = isAppRunning(bundleIdentifier: "com.apple.iphonesimulator")
+            let prelaunchState = try await performBlockingStep {
+                try Self.resolveSimulatorLaunchState(for: step)
+            }
+            let result = try await performBlockingStep {
                 try Self.launchIOSSimulatorApp(step: step)
             }
+            storeCleanup(.terminateIOSSimulatorApp(udid: result.udid, bundleIdentifier: result.bundleIdentifier))
+            if !prelaunchState.wasBooted {
+                storeCleanup(.shutdownSimulator(udid: result.udid))
+            }
+            if (step.showSimulator ?? true) && !simulatorWasRunning {
+                storeCleanup(.terminateApp(bundleIdentifier: "com.apple.iphonesimulator"))
+            }
         case .runTerminalCommand:
+            let wasRunning = isAppRunning(bundleIdentifier: "com.apple.Terminal")
             try await performBlockingStep {
                 try Self.runTerminalCommand(step.command)
             }
+            if !wasRunning {
+                storeCleanup(.terminateApp(bundleIdentifier: "com.apple.Terminal"))
+            }
         case .runGhosttyCommand:
+            let wasRunning = isAppRunning(bundleIdentifier: "com.mitchellh.ghostty")
             try await performBlockingStep {
                 try Self.runGhosttyCommand(step.command)
             }
+            if !wasRunning {
+                storeCleanup(.terminateApp(bundleIdentifier: "com.mitchellh.ghostty"))
+            }
         case .openURL:
-            try openURL(step.url)
+            let resolvedOpenURL = try resolvedOpenURL(for: step.url)
+            let wasRunning = isAppRunning(bundleIdentifier: resolvedOpenURL.bundleIdentifier)
+            try openURL(resolvedOpenURL.url.absoluteString)
+            if !wasRunning {
+                storeCleanup(.terminateApp(bundleIdentifier: resolvedOpenURL.bundleIdentifier))
+            }
         case .runShellCommand:
+            let inferredCleanup = Self.inferredCleanupAction(for: step.command)
             try await performBlockingStep {
                 try Self.runShellCommand(step.command)
+            }
+            if let inferredCleanup {
+                storeCleanup(inferredCleanup)
             }
         case .delay:
             try await delay(seconds: step.seconds)
@@ -158,6 +269,31 @@ final class SceneRunner: ObservableObject {
             try await typeText(step: step)
         case .pressKey:
             try await pressKey(step: step)
+        }
+    }
+
+    private func performCleanup(_ action: SceneCleanupAction) async throws {
+        switch action {
+        case let .terminateApp(bundleIdentifier):
+            terminateRunningApps(bundleIdentifier: bundleIdentifier)
+        case let .runShellCommand(command):
+            try await performBlockingStep {
+                try Self.runShellCommand(command)
+            }
+        case let .terminateIOSSimulatorApp(udid, bundleIdentifier):
+            try await performBlockingStep {
+                _ = try Self.runCapturedCommand(
+                    executable: "/usr/bin/xcrun",
+                    arguments: ["simctl", "terminate", udid, bundleIdentifier]
+                )
+            }
+        case let .shutdownSimulator(udid):
+            try await performBlockingStep {
+                _ = try Self.runCapturedCommand(
+                    executable: "/usr/bin/xcrun",
+                    arguments: ["simctl", "shutdown", udid]
+                )
+            }
         }
     }
 
@@ -173,27 +309,9 @@ final class SceneRunner: ObservableObject {
         }
     }
 
-    private func launchApp(named applicationName: String?, bundleIdentifier: String?) throws {
-        if let bundleIdentifier {
-            guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier) else {
-                throw SceneRunnerError.appNotFound(bundleIdentifier)
-            }
-            let configuration = NSWorkspace.OpenConfiguration()
-            NSWorkspace.shared.openApplication(at: url, configuration: configuration)
-            return
-        }
-
-        guard let applicationName else {
-            throw SceneRunnerError.invalidStep("launchApp requires applicationName or bundleIdentifier")
-        }
-
-        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: applicationName) ??
-            NSWorkspace.shared.fullPath(forApplication: applicationName).map({ URL(fileURLWithPath: $0) }) else {
-            throw SceneRunnerError.appNotFound(applicationName)
-        }
-
+    private func launchApp(_ app: ResolvedApplication) throws {
         let configuration = NSWorkspace.OpenConfiguration()
-        NSWorkspace.shared.openApplication(at: url, configuration: configuration)
+        NSWorkspace.shared.openApplication(at: app.url, configuration: configuration)
     }
 
     private func openURL(_ rawURL: String?) throws {
@@ -202,6 +320,62 @@ final class SceneRunner: ObservableObject {
         }
 
         NSWorkspace.shared.open(url)
+    }
+
+    private func resolveApplication(named applicationName: String?, bundleIdentifier: String?) throws -> ResolvedApplication {
+        if let bundleIdentifier {
+            guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier) else {
+                throw SceneRunnerError.appNotFound(bundleIdentifier)
+            }
+            return ResolvedApplication(url: url, bundleIdentifier: bundleIdentifier)
+        }
+
+        guard let applicationName else {
+            throw SceneRunnerError.invalidStep("launchApp requires applicationName or bundleIdentifier")
+        }
+
+        if let bundleURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: applicationName) {
+            let bundleIdentifier = Bundle(url: bundleURL)?.bundleIdentifier ?? applicationName
+            return ResolvedApplication(url: bundleURL, bundleIdentifier: bundleIdentifier)
+        }
+
+        guard let appPath = NSWorkspace.shared.fullPath(forApplication: applicationName) else {
+            throw SceneRunnerError.appNotFound(applicationName)
+        }
+
+        let url = URL(fileURLWithPath: appPath)
+        let resolvedBundleIdentifier = Bundle(url: url)?.bundleIdentifier ?? applicationName
+        return ResolvedApplication(url: url, bundleIdentifier: resolvedBundleIdentifier)
+    }
+
+    private func resolvedOpenURL(for rawURL: String?) throws -> ResolvedOpenURL {
+        guard let rawURL, let url = URL(string: rawURL) else {
+            throw SceneRunnerError.invalidStep("openURL requires a valid url")
+        }
+        guard let appURL = NSWorkspace.shared.urlForApplication(toOpen: url) else {
+            throw SceneRunnerError.invalidStep("Could not resolve the default app for \(rawURL)")
+        }
+        let bundleIdentifier = Bundle(url: appURL)?.bundleIdentifier ?? appURL.deletingPathExtension().lastPathComponent
+        return ResolvedOpenURL(url: url, bundleIdentifier: bundleIdentifier)
+    }
+
+    private func isAppRunning(bundleIdentifier: String) -> Bool {
+        !NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier).isEmpty
+    }
+
+    private func terminateRunningApps(bundleIdentifier: String) {
+        let apps = NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier)
+        for app in apps {
+            if !app.terminate() {
+                app.forceTerminate()
+            }
+        }
+    }
+
+    private func storeCleanup(_ action: SceneCleanupAction) {
+        guard !cleanupActions.contains(action) else { return }
+        cleanupActions.append(action)
+        canTeardown = !cleanupActions.isEmpty
     }
 
     nonisolated private static func runTerminalCommand(_ command: String?) throws {
@@ -269,7 +443,7 @@ final class SceneRunner: ObservableObject {
         }
     }
 
-    nonisolated private static func launchIOSSimulatorApp(step: SceneStep) throws {
+    nonisolated private static func launchIOSSimulatorApp(step: SceneStep) throws -> IOSSimulatorLaunchResult {
         let deviceName = step.device ?? "iPhone 17"
         let showSimulator = step.showSimulator ?? true
         let buildStrategy = step.buildStrategy ?? .alwaysBuild
@@ -370,6 +544,8 @@ final class SceneRunner: ObservableObject {
                 + (step.arguments ?? []),
             environment: launchConfiguration.environment
         )
+
+        return IOSSimulatorLaunchResult(udid: udid, bundleIdentifier: bundleIdentifier)
     }
 
     private func delay(seconds: Double?) async throws {
@@ -553,6 +729,33 @@ final class SceneRunner: ObservableObject {
         throw SceneRunnerError.simulatorDeviceNotFound(deviceName)
     }
 
+    nonisolated private static func resolveSimulatorLaunchState(for step: SceneStep) throws -> SimulatorLaunchState {
+        let deviceName = step.device ?? "iPhone 17"
+        let udid = try resolveSimulatorUDID(named: deviceName)
+        let result = try runCapturedCommand(
+            executable: "/usr/bin/xcrun",
+            arguments: ["simctl", "list", "devices", udid, "--json"]
+        )
+
+        guard
+            let data = result.stdout.data(using: .utf8),
+            let payload = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+            let devices = payload["devices"] as? [String: Any]
+        else {
+            throw SceneRunnerError.invalidSimulatorResponse
+        }
+
+        for (_, entries) in devices {
+            guard let entries = entries as? [[String: Any]] else { continue }
+            for entry in entries where (entry["udid"] as? String) == udid {
+                let state = entry["state"] as? String
+                return SimulatorLaunchState(udid: udid, wasBooted: state == "Booted")
+            }
+        }
+
+        return SimulatorLaunchState(udid: udid, wasBooted: false)
+    }
+
     nonisolated private static func bootSimulator(udid: String) throws {
         do {
             _ = try runCapturedCommand(
@@ -707,6 +910,19 @@ final class SceneRunner: ObservableObject {
             return "Sending text input"
         case .pressKey:
             return "Pressing \(step.key ?? "return")"
+        }
+    }
+
+    private func description(for action: SceneCleanupAction) -> String {
+        switch action {
+        case let .terminateApp(bundleIdentifier):
+            return "Closing \(bundleIdentifier)"
+        case .runShellCommand:
+            return "Running cleanup command"
+        case let .terminateIOSSimulatorApp(_, bundleIdentifier):
+            return "Stopping \(bundleIdentifier) in Simulator"
+        case .shutdownSimulator:
+            return "Shutting down Simulator"
         }
     }
 
@@ -930,6 +1146,20 @@ final class SceneRunner: ObservableObject {
             "INFOPLIST_KEY_WORKSTREAMSDisabledAuthUserId",
         ]
     }
+
+    nonisolated private static func inferredCleanupAction(for command: String?) -> SceneCleanupAction? {
+        guard let command else { return nil }
+        guard command.contains("npm run ops -- web start") || command.contains("npm run ops -- web restart") else {
+            return nil
+        }
+
+        let prefix = command.components(separatedBy: "&& npm run ops --").first?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let prefix, !prefix.isEmpty {
+            return .runShellCommand("\(prefix) && npm run ops -- web stop")
+        }
+
+        return .runShellCommand("npm run ops -- web stop")
+    }
 }
 
 private struct WindowGeometry {
@@ -937,9 +1167,36 @@ private struct WindowGeometry {
     let size: CGSize
 }
 
+private struct ResolvedApplication {
+    let url: URL
+    let bundleIdentifier: String
+}
+
+private struct ResolvedOpenURL {
+    let url: URL
+    let bundleIdentifier: String
+}
+
 private struct IOSBuildArtifact {
     let appPath: String
     let bundleIdentifier: String?
+}
+
+private struct IOSSimulatorLaunchResult: Sendable {
+    let udid: String
+    let bundleIdentifier: String
+}
+
+private struct SimulatorLaunchState: Sendable {
+    let udid: String
+    let wasBooted: Bool
+}
+
+private enum SceneCleanupAction: Hashable, Sendable {
+    case terminateApp(bundleIdentifier: String)
+    case runShellCommand(String)
+    case terminateIOSSimulatorApp(udid: String, bundleIdentifier: String)
+    case shutdownSimulator(udid: String)
 }
 
 private struct IOSLaunchConfiguration: Codable, Equatable {

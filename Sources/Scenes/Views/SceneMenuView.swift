@@ -42,7 +42,16 @@ struct SceneMenuView: View {
 
             VStack(spacing: 0) {
                 MenuActionRow(title: "Refresh", systemImage: "arrow.clockwise") {
-                store.refresh()
+                    store.refresh()
+                }
+
+                MenuActionRow(
+                    title: "Teardown",
+                    systemImage: "stop.circle",
+                    isEnabled: runner.canTeardown && !runner.isRunning
+                ) {
+                    NotificationCenter.default.post(name: AppDelegate.closePopoverNotification, object: nil)
+                    runner.teardownLastScene()
                 }
 
                 MenuActionRow(title: "Open Scenes Folder...", systemImage: "folder") {
