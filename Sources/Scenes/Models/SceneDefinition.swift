@@ -57,6 +57,7 @@ enum IOSAuthMode: String, Codable, Hashable, Sendable {
 
 enum SceneStepType: String, Codable, Hashable, Sendable {
     case launchApp
+    case bootIOSSimulator
     case launchIOSSimulatorApp
     case runTerminalCommand
     case runGhosttyCommand

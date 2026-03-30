@@ -213,6 +213,20 @@ final class SceneRunner: ObservableObject {
             if !wasRunning {
                 storeCleanup(.terminateApp(bundleIdentifier: resolvedApp.bundleIdentifier))
             }
+        case .bootIOSSimulator:
+            let simulatorWasRunning = isAppRunning(bundleIdentifier: "com.apple.iphonesimulator")
+            let prelaunchState = try await performBlockingStep {
+                try Self.resolveSimulatorLaunchState(for: step)
+            }
+            let result = try await performBlockingStep {
+                try Self.bootIOSSimulator(step: step)
+            }
+            if !prelaunchState.wasBooted {
+                storeCleanup(.shutdownSimulator(udid: result.udid))
+            }
+            if result.didOpenSimulatorApp && !simulatorWasRunning {
+                storeCleanup(.terminateApp(bundleIdentifier: "com.apple.iphonesimulator"))
+            }
         case .launchIOSSimulatorApp:
             let simulatorWasRunning = isAppRunning(bundleIdentifier: "com.apple.iphonesimulator")
             let prelaunchState = try await performBlockingStep {
@@ -444,22 +458,11 @@ final class SceneRunner: ObservableObject {
     }
 
     nonisolated private static func launchIOSSimulatorApp(step: SceneStep) throws -> IOSSimulatorLaunchResult {
-        let deviceName = step.device ?? "iPhone 17"
-        let showSimulator = step.showSimulator ?? true
         let buildStrategy = step.buildStrategy ?? .alwaysBuild
         let buildSettingOverrides = try iosBuildSettingOverrides(for: step)
         let launchConfiguration = try iosLaunchConfiguration(for: step)
-
-        if showSimulator {
-            let openProcess = Process()
-            openProcess.executableURL = URL(filePath: "/usr/bin/open")
-            openProcess.arguments = ["-a", "Simulator"]
-            try openProcess.run()
-            openProcess.waitUntilExit()
-        }
-
-        let udid = try resolveSimulatorUDID(named: deviceName)
-        try bootSimulator(udid: udid)
+        let bootResult = try bootIOSSimulator(step: step)
+        let udid = bootResult.udid
 
         var appPath = step.appPath
         var bundleIdentifier = step.bundleIdentifier
@@ -546,6 +549,23 @@ final class SceneRunner: ObservableObject {
         )
 
         return IOSSimulatorLaunchResult(udid: udid, bundleIdentifier: bundleIdentifier)
+    }
+
+    nonisolated private static func bootIOSSimulator(step: SceneStep) throws -> BootIOSSimulatorResult {
+        let deviceName = step.device ?? "iPhone 17"
+        let showSimulator = step.showSimulator ?? true
+
+        if showSimulator {
+            let openProcess = Process()
+            openProcess.executableURL = URL(filePath: "/usr/bin/open")
+            openProcess.arguments = ["-a", "Simulator"]
+            try openProcess.run()
+            openProcess.waitUntilExit()
+        }
+
+        let udid = try resolveSimulatorUDID(named: deviceName)
+        try bootSimulator(udid: udid)
+        return BootIOSSimulatorResult(udid: udid, didOpenSimulatorApp: showSimulator)
     }
 
     private func delay(seconds: Double?) async throws {
@@ -890,6 +910,8 @@ final class SceneRunner: ObservableObject {
         switch step.type {
         case .launchApp:
             return "Opening \(step.applicationName ?? step.bundleIdentifier ?? "app")"
+        case .bootIOSSimulator:
+            return "Booting \(step.device ?? "Simulator")"
         case .launchIOSSimulatorApp:
             return "Launching \(step.scheme ?? step.bundleIdentifier ?? "iOS app") on \(step.device ?? "Simulator")"
         case .runTerminalCommand:
@@ -1185,6 +1207,11 @@ private struct IOSBuildArtifact {
 private struct IOSSimulatorLaunchResult: Sendable {
     let udid: String
     let bundleIdentifier: String
+}
+
+private struct BootIOSSimulatorResult: Sendable {
+    let udid: String
+    let didOpenSimulatorApp: Bool
 }
 
 private struct SimulatorLaunchState: Sendable {
