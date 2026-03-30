@@ -633,18 +633,18 @@ final class SceneRunner: ObservableObject {
     nonisolated private static func bootIOSSimulator(step: SceneStep) throws -> BootIOSSimulatorResult {
         let deviceName = step.device ?? "iPhone 17"
         let showSimulator = step.showSimulator ?? true
+        let udid = try resolveSimulatorUDID(named: deviceName)
 
         if showSimulator {
             let openProcess = Process()
             openProcess.executableURL = URL(filePath: "/usr/bin/open")
-            openProcess.arguments = ["-a", "Simulator"]
+            openProcess.arguments = ["-a", "Simulator", "--args", "-CurrentDeviceUDID", udid]
             try openProcess.run()
             SceneProcessRegistry.shared.register(openProcess)
             defer { SceneProcessRegistry.shared.unregister(openProcess) }
             openProcess.waitUntilExit()
         }
 
-        let udid = try resolveSimulatorUDID(named: deviceName)
         try bootSimulator(udid: udid)
         return BootIOSSimulatorResult(udid: udid, didOpenSimulatorApp: showSimulator)
     }
