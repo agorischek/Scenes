@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import QuartzCore
 import SwiftUI
 
 @MainActor
@@ -7,6 +8,7 @@ final class OverlayWindowController {
     private let panel: NSPanel
     private var cancellables = Set<AnyCancellable>()
     private var hasPlacedPanel = false
+    private var isFadingOut = false
 
     init(runner: SceneRunner) {
         panel = NSPanel(
@@ -32,6 +34,7 @@ final class OverlayWindowController {
         panel.contentView?.wantsLayer = true
         panel.contentView?.layer?.cornerRadius = 14
         panel.contentView?.layer?.masksToBounds = true
+        panel.alphaValue = 0
         panel.orderOut(nil)
 
         runner.objectWillChange
@@ -44,20 +47,49 @@ final class OverlayWindowController {
 
     private func refresh(using runner: SceneRunner) {
         if runner.isOverlayDismissed {
-            panel.orderOut(nil)
+            hidePanel(animated: true)
             return
         }
 
         switch runner.executionState {
         case .idle:
-            panel.orderOut(nil)
+            hidePanel(animated: true)
             hasPlacedPanel = false
         case .running, .succeeded, .failed:
             if hasPlacedPanel == false || panel.isVisible == false {
                 positionPanel()
                 hasPlacedPanel = true
             }
-            panel.orderFrontRegardless()
+            showPanel()
+        }
+    }
+
+    private func showPanel() {
+        isFadingOut = false
+        panel.animator().alphaValue = 1
+        panel.orderFrontRegardless()
+    }
+
+    private func hidePanel(animated: Bool) {
+        guard panel.isVisible || panel.alphaValue > 0 else { return }
+        guard !isFadingOut else { return }
+
+        if !animated {
+            panel.alphaValue = 0
+            panel.orderOut(nil)
+            return
+        }
+
+        isFadingOut = true
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.22
+            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            panel.animator().alphaValue = 0
+        } completionHandler: { [weak self] in
+            guard let self else { return }
+            self.panel.orderOut(nil)
+            self.panel.alphaValue = 1
+            self.isFadingOut = false
         }
     }
 
