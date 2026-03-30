@@ -74,6 +74,7 @@ final class SceneRunner: ObservableObject {
     private var runToken = UUID()
     private var activeTask: Task<Void, Never>?
     private var cleanupActions: [SceneCleanupAction] = []
+    private var pendingCleanupActions: [SceneCleanupAction] = []
     private var lastSceneName: String?
 
     func run(scene: SceneDefinition) {
@@ -81,6 +82,7 @@ final class SceneRunner: ObservableObject {
 
         let runToken = UUID()
         self.runToken = runToken
+        pendingCleanupActions = cleanupActions
         cleanupActions = []
         canTeardown = false
         lastSceneName = scene.name
@@ -278,6 +280,8 @@ final class SceneRunner: ObservableObject {
 
     private func execute(step: SceneStep) async throws {
         switch step.type {
+        case .teardownPreviousRun:
+            try await teardownPendingCleanupActions()
         case .launchApp:
             let resolvedApp = try resolveApplication(named: step.applicationName, bundleIdentifier: step.bundleIdentifier)
             let wasRunning = isAppRunning(bundleIdentifier: resolvedApp.bundleIdentifier)
@@ -386,6 +390,16 @@ final class SceneRunner: ObservableObject {
                     arguments: ["simctl", "shutdown", udid]
                 )
             }
+        }
+    }
+
+    private func teardownPendingCleanupActions() async throws {
+        let actions = pendingCleanupActions.reversed()
+        pendingCleanupActions = []
+
+        for action in actions {
+            try Task.checkCancellation()
+            try await performCleanup(action)
         }
     }
 
@@ -1043,6 +1057,8 @@ final class SceneRunner: ObservableObject {
 
     private func description(for step: SceneStep) -> String {
         switch step.type {
+        case .teardownPreviousRun:
+            return "Tearing down previous run"
         case .launchApp:
             return "Opening \(step.applicationName ?? step.bundleIdentifier ?? "app")"
         case .bootIOSSimulator:

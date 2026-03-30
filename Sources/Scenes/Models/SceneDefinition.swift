@@ -56,6 +56,7 @@ enum IOSAuthMode: String, Codable, Hashable, Sendable {
 }
 
 enum SceneStepType: String, Codable, Hashable, Sendable {
+    case teardownPreviousRun
     case launchApp
     case bootIOSSimulator
     case launchIOSSimulatorApp
