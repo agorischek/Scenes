@@ -3,6 +3,55 @@ import ApplicationServices
 import Combine
 import Foundation
 
+private final class SceneProcessRegistry: @unchecked Sendable {
+    static let shared = SceneProcessRegistry()
+
+    private let lock = NSLock()
+    private var processes: [ObjectIdentifier: Process] = [:]
+
+    func register(_ process: Process) {
+        if process.processIdentifier > 0 {
+            _ = setpgid(process.processIdentifier, process.processIdentifier)
+        }
+        lock.lock()
+        processes[ObjectIdentifier(process)] = process
+        lock.unlock()
+    }
+
+    func unregister(_ process: Process) {
+        lock.lock()
+        processes.removeValue(forKey: ObjectIdentifier(process))
+        lock.unlock()
+    }
+
+    func cancelAll() {
+        let activeProcesses: [Process]
+        lock.lock()
+        activeProcesses = Array(processes.values)
+        lock.unlock()
+
+        for process in activeProcesses where process.isRunning {
+            let pid = process.processIdentifier
+            if pid > 0 {
+                kill(-pid, SIGTERM)
+            } else {
+                process.terminate()
+            }
+        }
+
+        Thread.sleep(forTimeInterval: 0.2)
+
+        for process in activeProcesses where process.isRunning {
+            let pid = process.processIdentifier
+            if pid > 0 {
+                kill(-pid, SIGKILL)
+            } else {
+                kill(process.processIdentifier, SIGKILL)
+            }
+        }
+    }
+}
+
 enum SceneExecutionState: Equatable {
     case idle
     case running
@@ -71,6 +120,17 @@ final class SceneRunner: ObservableObject {
                     self.activeTask = nil
                 }
             } catch {
+                if Task.isCancelled {
+                    await MainActor.run {
+                        guard self.runToken == runToken else { return }
+                        self.statusMessage = "Canceled \(scene.name)"
+                        self.isRunning = false
+                        self.executionState = .failed
+                        self.currentStepLabel = "Canceled"
+                        self.activeTask = nil
+                    }
+                    return
+                }
                 await MainActor.run {
                     guard self.runToken == runToken else { return }
                     self.statusMessage = "Failed: \(error.localizedDescription)"
@@ -86,6 +146,7 @@ final class SceneRunner: ObservableObject {
     func cancelCurrentScene() {
         guard isRunning else { return }
         activeTask?.cancel()
+        SceneProcessRegistry.shared.cancelAll()
     }
 
     func teardownLastScene() {
@@ -148,6 +209,17 @@ final class SceneRunner: ObservableObject {
                     self.activeTask = nil
                 }
             } catch {
+                if Task.isCancelled {
+                    await MainActor.run {
+                        guard self.runToken == runToken else { return }
+                        self.statusMessage = "Teardown canceled"
+                        self.isRunning = false
+                        self.executionState = .failed
+                        self.currentStepLabel = "Canceled"
+                        self.activeTask = nil
+                    }
+                    return
+                }
                 await MainActor.run {
                     guard self.runToken == runToken else { return }
                     self.statusMessage = "Teardown failed: \(error.localizedDescription)"
@@ -417,6 +489,8 @@ final class SceneRunner: ObservableObject {
         process.executableURL = URL(filePath: "/usr/bin/open")
         process.arguments = ["-a", "Terminal", scriptURL.path]
         try process.run()
+        SceneProcessRegistry.shared.register(process)
+        defer { SceneProcessRegistry.shared.unregister(process) }
         process.waitUntilExit()
 
         guard process.terminationStatus == 0 else {
@@ -433,6 +507,8 @@ final class SceneRunner: ObservableObject {
         process.executableURL = URL(filePath: "/usr/bin/open")
         process.arguments = ["-na", "/Applications/Ghostty.app", "--args", "-e", "zsh", "-lc", command]
         try process.run()
+        SceneProcessRegistry.shared.register(process)
+        defer { SceneProcessRegistry.shared.unregister(process) }
         process.waitUntilExit()
 
         guard process.terminationStatus == 0 else {
@@ -450,6 +526,8 @@ final class SceneRunner: ObservableObject {
         process.arguments = ["-lc", command]
 
         try process.run()
+        SceneProcessRegistry.shared.register(process)
+        defer { SceneProcessRegistry.shared.unregister(process) }
         process.waitUntilExit()
 
         guard process.terminationStatus == 0 else {
@@ -560,6 +638,8 @@ final class SceneRunner: ObservableObject {
             openProcess.executableURL = URL(filePath: "/usr/bin/open")
             openProcess.arguments = ["-a", "Simulator"]
             try openProcess.run()
+            SceneProcessRegistry.shared.register(openProcess)
+            defer { SceneProcessRegistry.shared.unregister(openProcess) }
             openProcess.waitUntilExit()
         }
 
@@ -726,7 +806,7 @@ final class SceneRunner: ObservableObject {
         )
 
         guard
-            let data = result.stdout.data(using: .utf8),
+            let data = result.stdout.data(using: String.Encoding.utf8),
             let payload = try JSONSerialization.jsonObject(with: data) as? [String: Any],
             let devices = payload["devices"] as? [String: Any]
         else {
@@ -887,6 +967,8 @@ final class SceneRunner: ObservableObject {
         process.standardError = stderrPipe
 
         try process.run()
+        SceneProcessRegistry.shared.register(process)
+        defer { SceneProcessRegistry.shared.unregister(process) }
         process.waitUntilExit()
 
         let stdoutData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
