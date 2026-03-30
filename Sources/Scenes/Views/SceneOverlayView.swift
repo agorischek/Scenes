@@ -6,13 +6,12 @@ struct SceneOverlayView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 10) {
-                Image(systemName: iconName)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(iconColor)
+                statusIndicator
 
                 Text(titleText)
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(.primary)
+                    .contentTransition(.interpolate)
 
                 Spacer()
             }
@@ -21,12 +20,14 @@ struct SceneOverlayView: View {
                 Text(sceneName)
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(.primary)
+                    .contentTransition(.interpolate)
             }
 
             if runner.totalSteps > 0 {
                 Text("Step \(max(runner.currentStepIndex, 1)) of \(runner.totalSteps)")
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(.secondary)
+                    .contentTransition(.interpolate)
             }
 
             if let stepLabel = runner.currentStepLabel {
@@ -34,18 +35,28 @@ struct SceneOverlayView: View {
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+                    .contentTransition(.interpolate)
             }
         }
         .padding(14)
         .frame(width: 280, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(Color.black.opacity(0.82))
+                .fill(.clear)
+                .background(
+                    VisualEffectBlur(material: .hudWindow, blendingMode: .withinWindow)
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                )
         )
         .overlay(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
+                .strokeBorder(Color.white.opacity(0.16), lineWidth: 1)
         )
+        .shadow(color: .black.opacity(0.18), radius: 20, y: 12)
+        .animation(.spring(duration: 0.32), value: runner.executionState)
+        .animation(.spring(duration: 0.32), value: runner.currentSceneName)
+        .animation(.spring(duration: 0.32), value: runner.currentStepIndex)
+        .animation(.spring(duration: 0.32), value: runner.currentStepLabel)
     }
 
     private var titleText: String {
@@ -53,7 +64,7 @@ struct SceneOverlayView: View {
         case .idle:
             return "Scenes"
         case .running:
-            return "Running Scene"
+            return "Setting scene"
         case .succeeded:
             return "Scene Complete"
         case .failed:
@@ -61,16 +72,28 @@ struct SceneOverlayView: View {
         }
     }
 
-    private var iconName: String {
+    @ViewBuilder
+    private var statusIndicator: some View {
         switch runner.executionState {
         case .idle:
-            return "sparkles.rectangle.stack"
+            Image(systemName: "sparkles.rectangle.stack")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(iconColor)
         case .running:
-            return "arrow.trianglehead.2.clockwise"
+            ProgressView()
+                .progressViewStyle(.circular)
+                .controlSize(.small)
+                .tint(iconColor)
+                .frame(width: 16, height: 16)
         case .succeeded:
-            return "checkmark.circle.fill"
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(iconColor)
+                .symbolEffect(.bounce, value: runner.executionState)
         case .failed:
-            return "xmark.octagon.fill"
+            Image(systemName: "xmark.octagon.fill")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(iconColor)
         }
     }
 
@@ -85,5 +108,24 @@ struct SceneOverlayView: View {
         case .failed:
             return Color(red: 1.0, green: 0.58, blue: 0.58)
         }
+    }
+}
+
+private struct VisualEffectBlur: NSViewRepresentable {
+    let material: NSVisualEffectView.Material
+    let blendingMode: NSVisualEffectView.BlendingMode
+
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.state = .active
+        view.material = material
+        view.blendingMode = blendingMode
+        return view
+    }
+
+    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
+        nsView.material = material
+        nsView.blendingMode = blendingMode
+        nsView.state = .active
     }
 }
