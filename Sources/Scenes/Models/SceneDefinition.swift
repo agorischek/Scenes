@@ -59,6 +59,7 @@ enum SceneStepType: String, Codable, Hashable, Sendable {
     case launchApp
     case bootIOSSimulator
     case launchIOSSimulatorApp
+    case hideAllWindows
     case runTerminalCommand
     case runGhosttyCommand
     case openURL

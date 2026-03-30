@@ -314,6 +314,8 @@ final class SceneRunner: ObservableObject {
             if (step.showSimulator ?? true) && !simulatorWasRunning {
                 storeCleanup(.terminateApp(bundleIdentifier: "com.apple.iphonesimulator"))
             }
+        case .hideAllWindows:
+            try hideAllWindows()
         case .runTerminalCommand:
             let wasRunning = isAppRunning(bundleIdentifier: "com.apple.Terminal")
             try await performBlockingStep {
@@ -733,6 +735,27 @@ final class SceneRunner: ObservableObject {
         app.activate()
     }
 
+    private func hideAllWindows() throws {
+        guard hasAccessibilityAccess() else {
+            throw SceneRunnerError.accessibilityPermissionRequired
+        }
+
+        let runningApps = NSWorkspace.shared.runningApplications
+            .filter { $0.activationPolicy == .regular }
+            .filter { $0.bundleIdentifier != Bundle.main.bundleIdentifier }
+
+        for app in runningApps {
+            let appElement = AXUIElementCreateApplication(app.processIdentifier)
+            if let windows = try? copyWindows(for: appElement) {
+                for window in windows {
+                    AXUIElementSetAttributeValue(window, kAXMinimizedAttribute as CFString, kCFBooleanTrue)
+                }
+            }
+
+            app.hide()
+        }
+    }
+
     private func applyGeometry(_ geometry: WindowGeometry, to window: AXUIElement) throws {
         var mutablePosition = geometry.position
         var mutableSize = geometry.size
@@ -997,6 +1020,8 @@ final class SceneRunner: ObservableObject {
             return "Booting \(step.device ?? "Simulator")"
         case .launchIOSSimulatorApp:
             return "Launching \(step.scheme ?? step.bundleIdentifier ?? "iOS app") on \(step.device ?? "Simulator")"
+        case .hideAllWindows:
+            return "Hiding open windows"
         case .runTerminalCommand:
             return "Running Terminal command"
         case .runGhosttyCommand:
