@@ -46,6 +46,14 @@ struct SceneMenuView: View {
                 }
 
                 MenuActionRow(
+                    title: "Cancel",
+                    systemImage: "xmark.circle",
+                    isEnabled: runner.isRunning
+                ) {
+                    runner.cancelCurrentScene()
+                }
+
+                MenuActionRow(
                     title: "Teardown",
                     systemImage: "stop.circle",
                     isEnabled: runner.canTeardown && !runner.isRunning
