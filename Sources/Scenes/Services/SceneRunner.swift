@@ -814,6 +814,8 @@ final class SceneRunner: ObservableObject {
     }
 
     private func applyGeometry(_ geometry: WindowGeometry, to window: AXUIElement) throws {
+        AXUIElementSetAttributeValue(window, kAXMinimizedAttribute as CFString, kCFBooleanFalse)
+
         var mutablePosition = geometry.position
         var mutableSize = geometry.size
         let positionValue = AXValueCreate(.cgPoint, &mutablePosition)
