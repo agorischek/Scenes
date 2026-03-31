@@ -1163,7 +1163,7 @@ final class SceneRunner: ObservableObject {
 
     func formattedElapsed(since startDate: Date?, relativeTo referenceDate: Date? = nil) -> String {
         guard let startDate else {
-            return "0:00"
+            return "0s"
         }
 
         let endDate = referenceDate ?? executionEndedAt ?? Date()
@@ -1173,10 +1173,20 @@ final class SceneRunner: ObservableObject {
         let seconds = elapsed % 60
 
         if hours > 0 {
-            return String(format: "%d:%02d:%02d", hours, minutes, seconds)
+            if minutes == 0 {
+                return "\(hours)h \(seconds)s"
+            }
+            return "\(hours)h \(minutes)m"
         }
 
-        return String(format: "%d:%02d", minutes, seconds)
+        if minutes > 0 {
+            if seconds == 0 {
+                return "\(minutes)m"
+            }
+            return "\(minutes)m \(seconds)s"
+        }
+
+        return "\(seconds)s"
     }
 
     private func resetExecutionDetails() {

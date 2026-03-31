@@ -5,13 +5,13 @@ struct SceneOverlayView: View {
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 12) {
                 HStack(alignment: .top, spacing: 10) {
                     HStack(spacing: 10) {
                         statusIndicator
 
                         Text(titleText)
-                            .font(.system(size: 14, weight: .semibold))
+                            .font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(.primary)
                             .contentTransition(.interpolate)
                     }
@@ -30,42 +30,30 @@ struct SceneOverlayView: View {
 
                 if let sceneName = runner.currentSceneName {
                     Text(sceneName)
-                        .font(.system(size: 13, weight: .medium))
+                        .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(.primary)
                         .contentTransition(.interpolate)
                 }
 
-                if runner.totalSteps > 0 {
-                    Text("Step \(max(runner.currentStepIndex, 1)) of \(runner.totalSteps)")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.secondary)
-                        .contentTransition(.interpolate)
-                }
-
-                if runner.sceneStartedAt != nil || runner.currentStepStartedAt != nil {
-                    HStack(spacing: 12) {
-                        TimerBadge(
-                            title: "Total",
-                            value: runner.formattedElapsed(
-                                since: runner.sceneStartedAt,
-                                relativeTo: runner.executionEndedAt ?? context.date
-                            )
-                        )
-
-                        TimerBadge(
-                            title: "Step",
-                            value: runner.formattedElapsed(
-                                since: runner.currentStepStartedAt,
-                                relativeTo: runner.executionEndedAt ?? context.date
-                            )
-                        )
+                VStack(alignment: .leading, spacing: 5) {
+                    if runner.totalSteps > 0 {
+                        Text("Step \(max(runner.currentStepIndex, 1)) of \(runner.totalSteps)")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(.secondary)
+                            .contentTransition(.interpolate)
                     }
-                    .contentTransition(.interpolate)
+
+                    if runner.sceneStartedAt != nil || runner.currentStepStartedAt != nil {
+                        Text(timingLine(referenceDate: runner.executionEndedAt ?? context.date))
+                            .font(.system(size: 12, weight: .medium, design: .monospaced))
+                            .foregroundStyle(.tertiary)
+                            .contentTransition(.numericText())
+                    }
                 }
 
                 if let stepLabel = runner.currentStepLabel {
                     Text(stepLabel)
-                        .font(.system(size: 12))
+                        .font(.system(size: 13))
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                         .contentTransition(.interpolate)
@@ -80,11 +68,11 @@ struct SceneOverlayView: View {
                         }
                         .buttonStyle(OverlayActionButtonStyle())
                     }
-                    .padding(.top, 2)
+                    .padding(.top, 4)
                 }
             }
-            .padding(14)
-            .frame(width: 280, alignment: .leading)
+            .padding(16)
+            .frame(width: 310, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .fill(.clear)
@@ -104,6 +92,18 @@ struct SceneOverlayView: View {
             .animation(.spring(duration: 0.32), value: runner.currentStepIndex)
             .animation(.spring(duration: 0.32), value: runner.currentStepLabel)
         }
+    }
+
+    private func timingLine(referenceDate: Date) -> String {
+        let total = runner.formattedElapsed(
+            since: runner.sceneStartedAt,
+            relativeTo: referenceDate
+        )
+        let step = runner.formattedElapsed(
+            since: runner.currentStepStartedAt,
+            relativeTo: referenceDate
+        )
+        return "\(total) total · \(step) step"
     }
 
     private var titleText: String {
@@ -155,35 +155,6 @@ struct SceneOverlayView: View {
         case .failed:
             return Color(red: 1.0, green: 0.58, blue: 0.58)
         }
-    }
-}
-
-private struct TimerBadge: View {
-    let title: String
-    let value: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(title.uppercased())
-                .font(.system(size: 9, weight: .semibold))
-                .tracking(0.5)
-                .foregroundStyle(.tertiary)
-
-            Text(value)
-                .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                .foregroundStyle(.primary)
-                .contentTransition(.numericText())
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
-        .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Color.white.opacity(0.08))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
-        )
     }
 }
 
