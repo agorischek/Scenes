@@ -606,7 +606,9 @@ final class SceneRunner: ObservableObject {
             titledCommand = command
         }
 
-        let escapedCommand = titledCommand
+        let wrappedCommand = "\(titledCommand); exec zsh -i"
+
+        let escapedCommand = wrappedCommand
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "\"", with: "\\\"")
         return "zsh -lc \"\(escapedCommand)\""
