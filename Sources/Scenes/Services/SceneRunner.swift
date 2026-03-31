@@ -70,6 +70,9 @@ final class SceneRunner: ObservableObject {
     @Published private(set) var executionState: SceneExecutionState = .idle
     @Published private(set) var isOverlayDismissed = false
     @Published private(set) var canTeardown = false
+    @Published private(set) var sceneStartedAt: Date?
+    @Published private(set) var currentStepStartedAt: Date?
+    @Published private(set) var executionEndedAt: Date?
     private var hasRequestedAccessibilityPrompt = false
     private var runToken = UUID()
     private var activeTask: Task<Void, Never>?
@@ -89,6 +92,9 @@ final class SceneRunner: ObservableObject {
         isRunning = true
         executionState = .running
         isOverlayDismissed = false
+        sceneStartedAt = Date()
+        currentStepStartedAt = sceneStartedAt
+        executionEndedAt = nil
         currentSceneName = scene.name
         totalSteps = scene.steps.count
         currentStepIndex = 0
@@ -103,6 +109,7 @@ final class SceneRunner: ObservableObject {
                     self.statusMessage = "Finished \(scene.name)"
                     self.isRunning = false
                     self.executionState = .succeeded
+                    self.executionEndedAt = Date()
                     self.currentStepIndex = self.totalSteps
                     self.currentStepLabel = "Complete"
                     self.activeTask = nil
@@ -118,6 +125,7 @@ final class SceneRunner: ObservableObject {
                     self.statusMessage = "Canceled \(scene.name)"
                     self.isRunning = false
                     self.executionState = .failed
+                    self.executionEndedAt = Date()
                     self.currentStepLabel = "Canceled"
                     self.activeTask = nil
                 }
@@ -128,6 +136,7 @@ final class SceneRunner: ObservableObject {
                         self.statusMessage = "Canceled \(scene.name)"
                         self.isRunning = false
                         self.executionState = .failed
+                        self.executionEndedAt = Date()
                         self.currentStepLabel = "Canceled"
                         self.activeTask = nil
                     }
@@ -138,6 +147,7 @@ final class SceneRunner: ObservableObject {
                     self.statusMessage = "Failed: \(error.localizedDescription)"
                     self.isRunning = false
                     self.executionState = .failed
+                    self.executionEndedAt = Date()
                     self.currentStepLabel = error.localizedDescription
                     self.activeTask = nil
                 }
@@ -166,6 +176,9 @@ final class SceneRunner: ObservableObject {
         isRunning = true
         executionState = .running
         isOverlayDismissed = false
+        sceneStartedAt = Date()
+        currentStepStartedAt = sceneStartedAt
+        executionEndedAt = nil
         currentSceneName = lastSceneName.map { "\($0) Teardown" } ?? "Scene Teardown"
         currentStepIndex = 0
         totalSteps = actions.count
@@ -180,6 +193,7 @@ final class SceneRunner: ObservableObject {
                     await MainActor.run {
                         guard self.runToken == runToken else { return }
                         self.currentStepIndex = index + 1
+                        self.currentStepStartedAt = Date()
                         self.currentStepLabel = self.description(for: action)
                         self.statusMessage = "Teardown step \(index + 1) of \(actions.count): \(self.currentStepLabel ?? "")"
                     }
@@ -192,6 +206,7 @@ final class SceneRunner: ObservableObject {
                     self.statusMessage = "Teardown complete"
                     self.isRunning = false
                     self.executionState = .succeeded
+                    self.executionEndedAt = Date()
                     self.currentStepIndex = self.totalSteps
                     self.currentStepLabel = "Complete"
                     self.activeTask = nil
@@ -207,6 +222,7 @@ final class SceneRunner: ObservableObject {
                     self.statusMessage = "Teardown canceled"
                     self.isRunning = false
                     self.executionState = .failed
+                    self.executionEndedAt = Date()
                     self.currentStepLabel = "Canceled"
                     self.activeTask = nil
                 }
@@ -217,6 +233,7 @@ final class SceneRunner: ObservableObject {
                         self.statusMessage = "Teardown canceled"
                         self.isRunning = false
                         self.executionState = .failed
+                        self.executionEndedAt = Date()
                         self.currentStepLabel = "Canceled"
                         self.activeTask = nil
                     }
@@ -227,6 +244,7 @@ final class SceneRunner: ObservableObject {
                     self.statusMessage = "Teardown failed: \(error.localizedDescription)"
                     self.isRunning = false
                     self.executionState = .failed
+                    self.executionEndedAt = Date()
                     self.currentStepLabel = error.localizedDescription
                     self.activeTask = nil
                 }
@@ -267,12 +285,13 @@ final class SceneRunner: ObservableObject {
         for (index, step) in scene.steps.enumerated() {
             try Task.checkCancellation()
 
-            await MainActor.run {
-                guard self.runToken == runToken else { return }
-                self.currentStepIndex = index + 1
-                self.currentStepLabel = self.description(for: step)
-                self.statusMessage = "Step \(index + 1) of \(scene.steps.count): \(self.currentStepLabel ?? "")"
-            }
+        await MainActor.run {
+            guard self.runToken == runToken else { return }
+            self.currentStepIndex = index + 1
+            self.currentStepStartedAt = Date()
+            self.currentStepLabel = self.description(for: step)
+            self.statusMessage = "Step \(index + 1) of \(scene.steps.count): \(self.currentStepLabel ?? "")"
+        }
 
             do {
                 try await execute(step: step)
@@ -1142,6 +1161,24 @@ final class SceneRunner: ObservableObject {
         return String(format: "%.1fs", seconds)
     }
 
+    func formattedElapsed(since startDate: Date?, relativeTo referenceDate: Date? = nil) -> String {
+        guard let startDate else {
+            return "0:00"
+        }
+
+        let endDate = referenceDate ?? executionEndedAt ?? Date()
+        let elapsed = max(0, Int(endDate.timeIntervalSince(startDate)))
+        let hours = elapsed / 3600
+        let minutes = (elapsed % 3600) / 60
+        let seconds = elapsed % 60
+
+        if hours > 0 {
+            return String(format: "%d:%02d:%02d", hours, minutes, seconds)
+        }
+
+        return String(format: "%d:%02d", minutes, seconds)
+    }
+
     private func resetExecutionDetails() {
         currentSceneName = nil
         currentStepLabel = nil
@@ -1150,6 +1187,9 @@ final class SceneRunner: ObservableObject {
         executionState = .idle
         isOverlayDismissed = false
         statusMessage = "Idle"
+        sceneStartedAt = nil
+        currentStepStartedAt = nil
+        executionEndedAt = nil
     }
 
     private func geometry(for step: SceneStep) -> WindowGeometry {
