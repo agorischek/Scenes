@@ -536,36 +536,14 @@ final class SceneRunner: ObservableObject {
         guard let command, !command.isEmpty else {
             throw SceneRunnerError.invalidStep("runGhosttyCommand requires command")
         }
-
-        let process = Process()
-        process.executableURL = URL(filePath: "/usr/bin/open")
-        process.arguments = ["-na", "/Applications/Ghostty.app", "--args", "-e", "zsh", "-lc", command]
-        try process.run()
-        SceneProcessRegistry.shared.register(process)
-        defer { SceneProcessRegistry.shared.unregister(process) }
-        process.waitUntilExit()
-
-        guard process.terminationStatus == 0 else {
-            throw SceneRunnerError.commandFailed("open -na /Applications/Ghostty.app --args -e zsh -lc \(command)", process.terminationStatus)
-        }
-    }
-
-    nonisolated private static func runGhosttyTabCommand(_ command: String?) throws {
-        guard let command, !command.isEmpty else {
-            throw SceneRunnerError.invalidStep("runGhosttyTabCommand requires command")
-        }
-
-        let escapedCommand = command
-            .replacingOccurrences(of: "\\", with: "\\\\")
-            .replacingOccurrences(of: "\"", with: "\\\"")
-
+        let shellCommand = ghosttyShellCommand(for: command)
         let script = """
-        tell application "Ghostty" to activate
-        tell application "System Events"
-          keystroke "t" using command down
-          delay 0.4
-          keystroke "\(escapedCommand)"
-          key code 36
+        tell application "Ghostty"
+          set cfg to new surface configuration
+          set command of cfg to "\(appleScriptEscaped(shellCommand))"
+          set wait after command of cfg to true
+          new window with configuration cfg
+          activate
         end tell
         """
 
@@ -573,6 +551,44 @@ final class SceneRunner: ObservableObject {
             executable: "/usr/bin/osascript",
             arguments: ["-e", script]
         )
+    }
+
+    nonisolated private static func runGhosttyTabCommand(_ command: String?) throws {
+        guard let command, !command.isEmpty else {
+            throw SceneRunnerError.invalidStep("runGhosttyTabCommand requires command")
+        }
+        let shellCommand = ghosttyShellCommand(for: command)
+        let script = """
+        tell application "Ghostty"
+          set cfg to new surface configuration
+          set command of cfg to "\(appleScriptEscaped(shellCommand))"
+          set wait after command of cfg to true
+          if (count of windows) is 0 then
+            new window with configuration cfg
+          else
+            new tab in front window with configuration cfg
+          end if
+          activate
+        end tell
+        """
+
+        _ = try runCapturedCommand(
+            executable: "/usr/bin/osascript",
+            arguments: ["-e", script]
+        )
+    }
+
+    nonisolated private static func ghosttyShellCommand(for command: String) -> String {
+        let escapedCommand = command
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+        return "zsh -lc \"\(escapedCommand)\""
+    }
+
+    nonisolated private static func appleScriptEscaped(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
     }
 
     nonisolated private static func runShellCommand(_ command: String?) throws {
