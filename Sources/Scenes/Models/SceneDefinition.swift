@@ -19,6 +19,7 @@ struct SceneStep: Codable, Hashable, Sendable {
     let applicationName: String?
     let bundleIdentifier: String?
     let command: String?
+    let title: String?
     let arguments: [String]?
     let buildStrategy: IOSBuildStrategy?
     let buildSettingOverrides: [String]?

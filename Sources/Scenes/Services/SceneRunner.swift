@@ -364,14 +364,14 @@ final class SceneRunner: ObservableObject {
         case .runGhosttyCommand:
             let wasRunning = isAppRunning(bundleIdentifier: "com.mitchellh.ghostty")
             try await performBlockingStep {
-                try Self.runGhosttyCommand(step.command)
+                try Self.runGhosttyCommand(step.command, title: step.title)
             }
             if !wasRunning {
                 storeCleanup(.terminateApp(bundleIdentifier: "com.mitchellh.ghostty"))
             }
         case .runGhosttyTabCommand:
             try await performBlockingStep {
-                try Self.runGhosttyTabCommand(step.command)
+                try Self.runGhosttyTabCommand(step.command, title: step.title)
             }
         case .openURL:
             let resolvedOpenURL = try resolvedOpenURL(for: step.url)
@@ -551,11 +551,11 @@ final class SceneRunner: ObservableObject {
         }
     }
 
-    nonisolated private static func runGhosttyCommand(_ command: String?) throws {
+    nonisolated private static func runGhosttyCommand(_ command: String?, title: String?) throws {
         guard let command, !command.isEmpty else {
             throw SceneRunnerError.invalidStep("runGhosttyCommand requires command")
         }
-        let shellCommand = ghosttyShellCommand(for: command)
+        let shellCommand = ghosttyShellCommand(for: command, title: title)
         let script = """
         tell application "Ghostty"
           set cfg to new surface configuration
@@ -572,11 +572,11 @@ final class SceneRunner: ObservableObject {
         )
     }
 
-    nonisolated private static func runGhosttyTabCommand(_ command: String?) throws {
+    nonisolated private static func runGhosttyTabCommand(_ command: String?, title: String?) throws {
         guard let command, !command.isEmpty else {
             throw SceneRunnerError.invalidStep("runGhosttyTabCommand requires command")
         }
-        let shellCommand = ghosttyShellCommand(for: command)
+        let shellCommand = ghosttyShellCommand(for: command, title: title)
         let script = """
         tell application "Ghostty"
           set cfg to new surface configuration
@@ -597,11 +597,23 @@ final class SceneRunner: ObservableObject {
         )
     }
 
-    nonisolated private static func ghosttyShellCommand(for command: String) -> String {
-        let escapedCommand = command
+    nonisolated private static func ghosttyShellCommand(for command: String, title: String?) -> String {
+        let titledCommand: String
+        if let title, !title.isEmpty {
+            let escapedTitle = shellSingleQuoted(title)
+            titledCommand = "printf '\\033]1;%s\\007\\033]2;%s\\007' \(escapedTitle) \(escapedTitle); \(command)"
+        } else {
+            titledCommand = command
+        }
+
+        let escapedCommand = titledCommand
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "\"", with: "\\\"")
         return "zsh -lc \"\(escapedCommand)\""
+    }
+
+    nonisolated private static func shellSingleQuoted(_ value: String) -> String {
+        "'" + value.replacingOccurrences(of: "'", with: "'\"'\"'") + "'"
     }
 
     nonisolated private static func appleScriptEscaped(_ value: String) -> String {
@@ -1121,9 +1133,9 @@ final class SceneRunner: ObservableObject {
         case .runTerminalCommand:
             return "Running Terminal command"
         case .runGhosttyCommand:
-            return "Running Ghostty command"
+            return step.title.map { "Running \($0)" } ?? "Running Ghostty command"
         case .runGhosttyTabCommand:
-            return "Running Ghostty tab command"
+            return step.title.map { "Opening \($0)" } ?? "Running Ghostty tab command"
         case .openURL:
             return "Opening \(step.url ?? "URL")"
         case .runShellCommand:
