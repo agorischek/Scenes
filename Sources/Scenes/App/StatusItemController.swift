@@ -13,7 +13,7 @@ final class StatusItemController {
     }
 
     func install<Content: View>(rootView: Content, target: AnyObject, action: Selector) {
-        let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         statusItem.button?.target = target
         statusItem.button?.action = action
         statusItem.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
@@ -36,7 +36,7 @@ final class StatusItemController {
         if popover.isShown {
             popover.performClose(sender)
         } else {
-            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+            popover.show(relativeTo: anchorRect(for: button), of: button, preferredEdge: .minY)
             popover.contentViewController?.view.window?.makeKey()
         }
     }
@@ -45,5 +45,21 @@ final class StatusItemController {
         if popover.isShown {
             popover.performClose(sender)
         }
+    }
+
+    private func anchorRect(for button: NSStatusBarButton) -> NSRect {
+        if let cell = button.cell {
+            let imageRect = cell.imageRect(forBounds: button.bounds)
+            if !imageRect.isEmpty {
+                return imageRect.insetBy(dx: -6, dy: 0)
+            }
+        }
+
+        let side = min(button.bounds.width, button.bounds.height)
+        let origin = NSPoint(
+            x: button.bounds.midX - (side / 2),
+            y: button.bounds.midY - (side / 2)
+        )
+        return NSRect(origin: origin, size: NSSize(width: side, height: side)).insetBy(dx: -4, dy: 0)
     }
 }
